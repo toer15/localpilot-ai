@@ -1,4 +1,4 @@
-# Development status — LocalPilot AI 0.1.0
+# Development status — LocalPilot AI 0.1.1
 
 Last updated: 9 November 2026. Test machine: Windows 11 x64, AMD Ryzen 7 9800X3D, 31.2 GB RAM, AMD Radeon RX 9070 XT 15.9 GB (Vulkan), Node 26.13.0, Ollama 0.40.15, model `qwen3.6:27b` (reports tools, vision and thinking).
 
@@ -24,7 +24,10 @@ This document separates **implemented**, **verified**, and **not yet verified**.
 | Requirement | Evidence | Status |
 | --- | --- | --- |
 | TypeScript and production bundles | `npm run typecheck`, `npm run build` and `npm run dist` after the independent AI cursor and updater changes | **Pass** |
-| Update metadata and packaged updater | `npm run dist`: `latest.yml` and `app-update.yml` generated; 38 `electron-updater` files in `app.asar`; `npm run smoke:packaged`: packaged app 0.1.0, `isPackaged: true`, 57 tools | **Built; GitHub release check pending** |
+| Update metadata and packaged updater | `npm run dist`: `latest.yml` and `app-update.yml` generated; 38 `electron-updater` files in `app.asar`; `npm run smoke:packaged`: packaged app 0.1.0, `isPackaged: true`, 57 tools | **Pass** |
+| Published GitHub release | `v0.1.0` workflow passed; release assets repaired with the four assets: installer, blockmap, portable, `latest.yml` | **Pass** |
+| Live GitHub update check | Packaged 0.1.0 app: Settings → About → **Check for updates** reached GitHub, returned “Up to date (0.1.0)”, and showed no modal while current | **Pass** |
+| Update prompt/download from a newer release | Packaged 0.1.0 app runs against published 0.1.1; launch/check, modal, progress and downloaded state | **Pending** |
 | Final regression re-run | `npx electron out/main/index.js --self-test`: 12/12 checks; `SMOKE_PERSIST=1 npm run smoke`: local `UI_READY`, 57 tools with the optional pack uninstalled, settings and conversations persisted across restart | **Pass** |
 | Built-in self-test | `npx electron out/main/index.js --self-test`: 12 checks, 0 failed (SQLite, hardware, providers, models, real local inference, tool registry, project files + traversal guard, PowerShell, 2560×1440 screenshot, Playwright Edge, MCP SDK, local-only prerequisites) | **Pass** |
 | Real local Ollama chat in the UI | UI smoke: streamed `UI_READY`; persisted conversation with `providerId: ollama`, `modelId: qwen3.6:27b` | **Pass** |
@@ -42,7 +45,7 @@ This document separates **implemented**, **verified**, and **not yet verified**.
 | Stop / cancellation | Stop during a 120-second `terminal.run`: run became inactive, tool status showed stopped | **Pass** |
 | Persistence across restart | `SMOKE_PERSIST=1`: dark theme, onboarding complete, default provider/model and 3 conversations survived a real app restart | **Pass** |
 | Local-only enforcement | `npm run acceptance:localonly`: remote endpoint blocked during discovery, startup and chat; web/browser tools absent; agent run ended with a local-only error and no active run | **Pass** |
-| Installer and portable build | `npm run dist` exit 0; NSIS 137,079,440 bytes, portable 119,727,356 bytes | **Built** |
+| Installer and portable build | `npm run dist` exit 0; NSIS 137,169,268 bytes, portable 119,906,224 bytes; `latest.yml` 0.1.1 and `app-update.yml` present | **Built** |
 | Packaged app starts | `npm run smoke:packaged`: packaged app 0.1.0, `isPackaged: true`, 57 tools, 9,035,776-byte database, renderer mounted; AI test overlay started and stopped (1 overlay window) | **Pass** |
 | NSIS install/uninstall on a clean machine | Not run | **Not verified** |
 | Portable executable launch | Not run (the unpacked packaged app was launched) | **Not verified** |

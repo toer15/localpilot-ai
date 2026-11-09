@@ -51,7 +51,7 @@ The packaged app contains `resources/app-update.yml`, generated from the `publis
    gh run watch
    ```
 
-   The workflow verifies that the tag matches `package.json`, runs typecheck/build, and publishes NSIS, portable and update metadata. It fails rather than silently publishing a mismatched version.
+   The workflow verifies that the tag matches `package.json`, runs typecheck/build, packages NSIS and portable, then runs `scripts/publish-release.mjs` to upload `latest.yml`, the installer, its blockmap and the portable build. It fails rather than silently publishing a mismatched version.
 
 6. Add or edit user-facing notes on the GitHub release if desired. The app shows the release body as **What’s new** when GitHub supplies it.
 
@@ -66,7 +66,7 @@ $env:GH_TOKEN = gh auth token
 npm run release:github
 ```
 
-This uses the same public GitHub provider and publishes all configured Windows artifacts. Do not embed a token in the app or commit one.
+This runs `electron-builder --publish never`, normalizes the asset names to match `latest.yml`, and uploads them through `gh release` (or creates the release with generated notes if it does not exist). Using `gh` avoids electron-builder's per-target GitHub publishers racing to create the same release. Do not embed a token in the app or commit one.
 
 ## Rules
 

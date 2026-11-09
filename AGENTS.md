@@ -22,6 +22,7 @@ This file is for coding agents and contributors. It documents commands, architec
 | `npm run acceptance:overlay` | Install the optional AI tester pack, verify the independent AI cursor/border overlay, a real Esc stop, and uninstall revocation. Use `OVERLAY_SCALE=1.25` for a forced-DPI run. |
 | `npm run acceptance:fullscreen` | Launch Rocket League full-screen, verify the overlay is above it without focus theft, press real Esc, and confirm the game survives. |
 | `npm run smoke:packaged` | Launch `release/win-unpacked/LocalPilot AI.exe` and verify packaged startup and overlay preload. |
+| `npm run update:check` | Open Settings → About in the packaged app and verify the live GitHub update check reports the installed version up to date. Run after `npm run dist` and a published release. |
 
 The acceptance scripts need Ollama running with at least one chat model, plus Edge/Chrome for browser tests. They create conversations in the real app database and PNGs in `artifacts/`.
 

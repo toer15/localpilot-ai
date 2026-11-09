@@ -4,7 +4,7 @@ LocalPilot AI is a local-first AI workstation for Windows. It runs a real agent 
 
 Installed builds update themselves from [GitHub Releases](https://github.com/toer15/localpilot-ai/releases): they check at launch and every four hours, download in the background, show an in-app prompt, and restart only when you choose. **Settings → About → Check for updates** also checks manually.
 
-**Version 0.1.0** · Windows 10/11 x64 · Electron 45 · React 19 · TypeScript 7 · SQLite
+**Version 0.1.1** · Windows 10/11 x64 · Electron 45 · React 19 · TypeScript 7 · SQLite
 
 ![LocalPilot AI home](docs/images/ui-home.png)
 
@@ -25,8 +25,8 @@ Two Windows x64 builds are produced in `release/`:
 
 | Build | File |
 | --- | --- |
-| Installer (per-user NSIS) | `LocalPilot AI-Setup-0.1.0-x64.exe` |
-| Portable | `LocalPilot-Portable-0.1.0.exe` |
+| Installer (per-user NSIS) | `LocalPilot AI-Setup-0.1.1-x64.exe` |
+| Portable | `LocalPilot-Portable-0.1.1.exe` |
 
 The builds are **not code-signed**, so Windows SmartScreen may warn. Verify the source and choose “More info → Run anyway” only if you trust the build. The installer does not require administrator rights; it installs for the current user and can create desktop and Start Menu shortcuts. Installed NSIS builds use GitHub Releases for in-app updates; the portable executable does not self-update — download a newer portable build manually.
 
@@ -106,7 +106,7 @@ No conversations, prompts, files or credentials are sent to a cloud service by d
 
 ## Status and limitations
 
-Implemented and exercised on Windows 11 x64 with Ollama and `qwen3.6:27b`: real local chat, project file tools, PowerShell, desktop screenshots, Notepad interaction, browser automation, MCP install/tool discovery/removal, plugin revocation, cancellation, local-only blocking, the installable AI tester overlay with a real Esc stop, Rocket League full-screen layering, forced 125%/150% DPI checks, persistence across restart, and a packaged app launch. The builds are unsigned. The NSIS installer was built but not installed on a clean machine, and actual multi-monitor hardware was not available. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the full matrix and [docs/TESTING.md](docs/TESTING.md) for exact commands and results.
+Implemented and exercised on Windows 11 x64 with Ollama and `qwen3.6:27b`: real local chat, project file tools, PowerShell, desktop screenshots, Notepad interaction, browser automation, MCP install/tool discovery/removal, plugin revocation, cancellation, local-only blocking, the installable AI tester overlay with a real Esc stop, Rocket League full-screen layering, forced 125%/150% DPI checks, persistence across restart, and a packaged app launch. The packaged app's Settings → About update check reached the live GitHub release and reported up to date. The builds are unsigned. The NSIS installer was built but not installed on a clean machine, and actual multi-monitor hardware was not available. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the full matrix and [docs/TESTING.md](docs/TESTING.md) for exact commands and results.
 
 Native plugins execute in a forked child process, not an OS-level sandbox. MCP presets launch third-party servers through `npx`/`uvx` and are not audited by LocalPilot. Local-only mode cannot restrict code inside an explicitly enabled MCP server or native plugin.
 

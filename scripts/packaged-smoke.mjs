@@ -13,6 +13,7 @@ import { _electron as electron } from 'playwright-core'
 
 const exe = path.join(process.cwd(), 'release', 'win-unpacked', 'LocalPilot AI.exe')
 const artifacts = path.join(process.cwd(), 'artifacts')
+const expectedVersion = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')).version
 fs.mkdirSync(artifacts, { recursive: true })
 
 let app
@@ -42,7 +43,7 @@ async function main() {
   })
   console.log(JSON.stringify(info, null, 2))
   if (!info.appInfo.isPackaged) throw new Error('Packaged executable reported isPackaged=false.')
-  if (info.appInfo.version !== '0.1.0') throw new Error(`Unexpected packaged version: ${info.appInfo.version}`)
+  if (info.appInfo.version !== expectedVersion) throw new Error(`Unexpected packaged version: ${info.appInfo.version}`)
   if (!info.appInfo.toolsCount || !info.tools) throw new Error('Tool registry is empty in the packaged app.')
   if (!info.appInfo.dbBytes) throw new Error('SQLite database was not created in the packaged app.')
 

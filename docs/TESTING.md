@@ -18,6 +18,7 @@ npm run acceptance:overlay
 npm run acceptance:fullscreen
 npm run smoke:packaged
 npm run dist
+npm run update:check
 ```
 
 `npm run acceptance` builds first. The individual scripts assume `out/` is current unless invoked via their npm script.
@@ -27,6 +28,10 @@ npm run dist
 ### Typecheck and build — PASS
 
 `npm run typecheck` passed for `tsconfig.node.json` and `tsconfig.web.json`. `npm run build` produced main, preload and renderer bundles in `out/`. Two expected Vite warnings note ineffective dynamic imports; they are informational.
+
+### Software updates — PASS (live up-to-date check)
+
+`npm run update:check` launched the packaged build, opened Settings → About and clicked **Check for updates**. The status changed from `idle` to `up-to-date` with `currentVersion: "0.1.0"` and no update modal appeared for the current version. The public GitHub release `v0.1.0` had the NSIS installer, blockmap, portable build and `latest.yml`. A version-to-version prompt/download is exercised against `v0.1.1` below.
 
 ### Self-test — PASS (12/12)
 
@@ -132,11 +137,12 @@ After the tester integration, `npx electron out/main/index.js --self-test` repor
 
 `npm run dist` exited 0 and produced:
 
-- `release/LocalPilot AI-Setup-0.1.0-x64.exe` — 137,079,440 bytes.
-- `release/LocalPilot-Portable-0.1.0.exe` — 119,727,356 bytes.
-- `release/win-unpacked/` — unpacked application.
+- `release/LocalPilot AI-Setup-0.1.1-x64.exe` — 137,169,268 bytes.
+- `release/LocalPilot-Portable-0.1.1.exe` — 119,906,224 bytes.
+- `release/latest.yml` — update metadata pointing at the normalized installer name.
+- `release/win-unpacked/` — unpacked application with `resources/app-update.yml`.
 
-`npm run smoke:packaged` launched `release/win-unpacked/LocalPilot AI.exe`: `isPackaged: true`, version 0.1.0, 57 tools, 9,035,776-byte database, renderer mounted, no page errors; the AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-home.png`.
+`npm run smoke:packaged` launched `release/win-unpacked/LocalPilot AI.exe`: `isPackaged: true`, version 0.1.1, 57 tools, 9,035,776-byte database, renderer mounted, no page errors; the AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-home.png`.
 
 The NSIS installer was not installed/uninstalled on a clean machine, and the portable executable was not launched directly.
 
@@ -173,6 +179,7 @@ Artifacts contain real test conversations and desktop content; review before sha
 
 - Clean-machine NSIS install, upgrade, uninstall and data retention.
 - Portable executable direct launch.
+- Completing a version-to-version install after download; the 0.1.0 → 0.1.1 test stopped at the downloaded prompt without running the installer.
 - Windows 10, Chrome, actual multi-monitor hardware and OS-level per-monitor DPI scaling (forced app scaling was used).
 - LM Studio, llama.cpp/Vulkan and cloud provider runtime behavior.
 - Capability-warning branches (the test model reports tools, vision and thinking).
