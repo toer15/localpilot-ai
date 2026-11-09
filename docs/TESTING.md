@@ -51,6 +51,8 @@ After `v0.1.2` was published, a temporary isolated harness (`artifacts/update-ch
 
 A copy of the preserved packaged 0.1.1 app was launched with the same isolation. `updates.check()` returned `available` for **0.1.2**, with the published release notes and message “LocalPilot AI 0.1.2 is available. Downloading the update…”. The updater began downloading; the harness closed at the `available` state, so completion and installation were not tested. Screenshot: `artifacts/update-0.1.1-to-0.1.2.png`.
 
+For 0.1.3, the packaged build opened Settings → About, clicked **Check for updates**, and returned `up-to-date` at `currentVersion: 0.1.3` with no modal. Screenshot: `artifacts/update-settings-0.1.3.png`. A preserved packaged 0.1.2 build with an isolated profile detected **0.1.3**; `updates.check()` returned `phase: available` with the published release notes and message “LocalPilot AI 0.1.3 is available. Downloading the update…”. The harness closed at `available`, so completion/install was not exercised. Screenshot: `artifacts/update-0.1.2-to-0.1.3.png`.
+
 The final NSIS restart/install was intentionally not run, so the installer handoff and post-update launch remain unverified.
 
 ### Self-test — PASS (12/12)
@@ -201,6 +203,13 @@ The 0.1.3 targets were written to `artifacts/release-0.1.3` while the installed 
 
 An isolated packaged launch used a temporary `--user-data-dir` and reported `isPackaged: true`, version 0.1.3, 57 tools, Full PC access on by default, an 86,016-byte database, and a mounted renderer with no page errors. The real AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-0.1.3-home.png`. Clean-machine NSIS install/uninstall and portable direct launch were not run.
 
+GitHub Actions run [42659917386](https://github.com/toer15/localpilot-ai/actions/runs/42659917386) then built from tag `v0.1.3` and published public release [v0.1.3](https://github.com/toer15/localpilot-ai/releases/tag/v0.1.3):
+
+- `LocalPilot-AI-Setup-0.1.3-x64.exe` — 137,173,940 bytes.
+- `LocalPilot-AI-Setup-0.1.3-x64.exe.blockmap` — 143,357 bytes.
+- `LocalPilot-Portable-0.1.3.exe` — 119,912,198 bytes.
+- `latest.yml` — version 0.1.3, pointing at the normalized installer.
+
 ## Artifacts
 
 | File | Content |
@@ -223,6 +232,8 @@ An isolated packaged launch used a temporary `--user-data-dir` and reported `isP
 | `artifacts/queue-mode-013.png` | Queued follow-up visible while the first task is running |
 | `artifacts/queue-mode-complete-013.png` | Completed queued follow-up with both replies |
 | `artifacts/packaged-0.1.3-home.png` | Isolated packaged 0.1.3 app launched |
+| `artifacts/update-settings-0.1.3.png` | Packaged 0.1.3 Settings → About live up-to-date check |
+| `artifacts/update-0.1.2-to-0.1.3.png` | Preserved 0.1.2 app detecting published 0.1.3 |
 | `artifacts/update-settings-0.1.2.png` | Packaged 0.1.2 Settings → About live up-to-date check |
 | `artifacts/update-0.1.1-to-0.1.2.png` | Preserved 0.1.1 app detecting published 0.1.2 |
 | `artifacts/update-settings.png` | Settings → About live up-to-date check |
