@@ -10,12 +10,13 @@ interface Props {
   models: ModelInfo[]
   hardware: HardwareInfo | null
   onRefresh: () => Promise<void>
+  onOpenModelLibrary: () => Promise<void>
   onComplete: (selection: { providerId: string; modelId: string } | null) => Promise<void>
 }
 
 const api = window.localpilot
 
-export function Onboarding({ providers, models, hardware, onRefresh, onComplete }: Props) {
+export function Onboarding({ providers, models, hardware, onRefresh, onOpenModelLibrary, onComplete }: Props) {
   const [step, setStep] = useState(0)
   const [selection, setSelection] = useState<{ providerId: string; modelId: string } | null>(() => {
     const first = models.find((m) => m.kind === 'chat') ?? models[0]
@@ -99,8 +100,8 @@ export function Onboarding({ providers, models, hardware, onRefresh, onComplete 
             <>
               <h2>Find your local runtimes.</h2>
               <p className="lead">
-                LocalPilot discovered these local model servers. You do not need to download any model again — existing
-                Ollama and LM Studio models are used directly.
+                LocalPilot can download and run its own llama.cpp engine from the Model library, so Ollama is not required.
+                Existing Ollama and LM Studio models are still used directly when you already have them.
               </p>
               <div className="stack">
                 {providers.map((provider) => (
@@ -127,15 +128,16 @@ export function Onboarding({ providers, models, hardware, onRefresh, onComplete 
                         {starting === provider.id ? <Spinner /> : <Icon name="play" size={11} />} Start
                       </button>
                     ) : null}
-                    {!provider.running && provider.id !== 'ollama' ? (
+                    {!provider.running && provider.id === 'llamacpp' ? (
+                      <button className="btn btn-sm btn-success" type="button" onClick={() => void onOpenModelLibrary()}>
+                        <Icon name="download" size={11} /> Install engine
+                      </button>
+                    ) : null}
+                    {!provider.running && provider.id !== 'ollama' && provider.id !== 'llamacpp' ? (
                       <button
                         className="btn btn-sm btn-ghost"
                         type="button"
-                        onClick={() =>
-                          void api.app.openExternal(
-                            provider.id === 'lmstudio' ? 'https://lmstudio.ai/' : 'https://github.com/ggml-org/llama.cpp/releases'
-                          )
-                        }
+                        onClick={() => void api.app.openExternal('https://lmstudio.ai/')}
                       >
                         Setup
                       </button>
@@ -148,7 +150,8 @@ export function Onboarding({ providers, models, hardware, onRefresh, onComplete 
                     <a href="https://ollama.com/download" onClick={(e) => { e.preventDefault(); void api.app.openExternal('https://ollama.com/download/windows') }}>
                       ollama.com/download
                     </a>
-                    . LocalPilot never downloads a model that is already installed.
+                    . LocalPilot never downloads a model that is already installed. You can skip Ollama entirely and install
+                    the managed local engine in the Model library.
                   </div>
                 ) : null}
                 <div className="row">

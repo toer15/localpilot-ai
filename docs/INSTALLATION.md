@@ -1,18 +1,19 @@
 # Installation
 
-LocalPilot AI 0.1.1 supports Windows 10 and Windows 11 x64.
+LocalPilot AI 0.1.2 supports Windows 10 and Windows 11 x64.
 
 ## Requirements
 
-- Windows 10/11 x64, 8 GB RAM minimum (16 GB+ recommended), and enough disk for models.
-- A local inference runtime. **Ollama** is recommended and auto-detected at `http://127.0.0.1:11434`.
+- Windows 10/11 x64, 8 GB RAM minimum (16 GB+ recommended), and enough disk for the managed engine and models.
+- Internet access for the first engine and model download. After that, inference runs locally.
+- **No Ollama installation is required.** LocalPilot can download and manage its own llama.cpp engine. Existing Ollama, LM Studio or llama.cpp servers are optional and auto-detected.
 - Microsoft Edge or Google Chrome for built-in browser automation.
 - Optional: Node.js for `npx`-based MCP presets; `uv`/`uvx` for the Git MCP preset.
-- GPU acceleration is provided by your runtime. LocalPilot does not install CUDA, ROCm or Vulkan drivers and does not assume ROCm on AMD.
+- GPU acceleration is provided by the selected runtime. LocalPilot selects the official llama.cpp Vulkan build when available and otherwise uses the CPU build; it does not install CUDA, ROCm or Vulkan drivers and does not assume ROCm on AMD.
 
 ## Install with the NSIS installer
 
-1. Run `release/LocalPilot AI-Setup-0.1.1-x64.exe`.
+1. Run `release/LocalPilot AI-Setup-0.1.2-x64.exe`.
 2. The installer is per-user and does not require administrator rights. Choose an install directory if you do not want the default.
 3. Shortcuts are created for the desktop and Start Menu.
 4. Launch **LocalPilot AI**.
@@ -27,23 +28,16 @@ The updater replaces the installed app. The portable executable does not self-up
 
 ## Portable build
 
-Run `release/LocalPilot-Portable-0.1.1.exe`. It unpacks and starts without an installation. Application data still lives under `%APPDATA%\LocalPilot AI` (portable mode does not redirect user data next to the executable). Portable builds do not use the in-app updater; replace the executable with a newer release when you want to upgrade.
+Run `release/LocalPilot-Portable-0.1.2.exe`. It unpacks and starts without an installation. Application data still lives under `%APPDATA%\LocalPilot AI` (portable mode does not redirect user data next to the executable). Portable builds do not use the in-app updater; replace the executable with a newer release when you want to upgrade.
 
 ## First run
 
-1. The setup wizard checks for local runtimes and models. You can skip it and configure everything later in Settings.
-2. Install or start Ollama:
+1. The setup wizard checks for existing local runtimes and models. You can skip it; everything is also available in Settings and the Model library.
+2. Open **Model library → Local engine → Install local engine**. LocalPilot downloads the official llama.cpp Windows build into `%APPDATA%\LocalPilot AI\runtime\llama.cpp`; no separate app needs to stay open.
+3. In **Model library → Browse the model catalog**, choose a recommended GGUF model and press the green **Download** button. Choose a quantization in the dialog. A 7–8B Q4 model is comfortable on 8–12 GB VRAM; smaller models work on 8 GB systems. The model downloads to the configured models folder and appears under **Local GGUF files**.
+4. Press **Load & use** on the downloaded model. LocalPilot starts the managed engine and selects the model in the chat toolbar. Send a prompt; the first load can take a few seconds while the model is read into memory.
 
-   ```powershell
-   ollama serve
-   ollama pull qwen3:8b
-   ```
-
-   Model choice depends on hardware: a 7–8B Q4 model is comfortable on 8–12 GB VRAM; larger models need more memory. The app can also pull models from its Model library.
-3. In LocalPilot, open **Models & endpoints** if the model is not detected, then refresh. Select the model in the chat toolbar.
-4. Send a short prompt. The first load can take tens of seconds while the model is read into memory.
-
-If you use LM Studio, start its local server on port 1234. For llama.cpp, point **Settings → Models & endpoints → llama-server.exe path** at a `llama-server.exe` build (a Vulkan build for AMD Radeon), import a GGUF in the Model library, then load it.
+If you already use Ollama, it is detected at `http://127.0.0.1:11434` and its models remain available. To pull through Ollama instead, choose the **Ollama library** source and use its Download button. LM Studio can be started on port 1234. An existing llama.cpp build can still be selected under **Settings → Models → llama-server.exe path**.
 
 ## Building from source
 
@@ -75,6 +69,7 @@ data\localpilot.db          SQLite database
 data\selftest-report.json   Latest self-test report
 logs\main.log               Main-process log
 models\                     Imported/downloaded GGUF files
+runtime\llama.cpp\          Managed llama.cpp engine downloaded by LocalPilot
 plugins\                    Installed native plugins
 captures\                   Screenshots
 browser\                    Browser automation profile

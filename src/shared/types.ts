@@ -404,7 +404,7 @@ export interface ModelCatalogItem {
 export interface DownloadTask {
   id: string
   name: string
-  kind: 'ollama' | 'gguf'
+  kind: 'ollama' | 'gguf' | 'runtime'
   status: 'queued' | 'running' | 'done' | 'error' | 'cancelled'
   progress: number
   receivedBytes?: number
@@ -414,6 +414,15 @@ export interface DownloadTask {
   filePath?: string
   startedAt: string
   updatedAt: string
+}
+
+export interface LlamaRuntimeStatus {
+  installed: boolean
+  running: boolean
+  path?: string
+  version?: string
+  variant?: string
+  managed?: boolean
 }
 
 export interface LocalModelFile {

@@ -133,20 +133,36 @@ Artifacts: `ai-test-overlay-scale-1_25.png`, `ai-test-overlay-scale-1_5.png`.
 
 The game displayed its own “SAVE FAILURE” dialog during the run, unrelated to the overlay. No actual multi-monitor hardware was available.
 
-### Final regression re-run — PASS
+### Final regression re-run — PASS (self-test)
 
 After the tester integration, `npx electron out/main/index.js --self-test` reported **12 checks, 0 failed**. `SMOKE_PERSIST=1 npm run smoke` streamed `UI_READY`, exercised the 57-tool registry with the optional pack uninstalled, restarted the app, and verified the dark theme, completed onboarding, default Ollama model and conversations persisted.
 
-### Installer, portable and packaged app — BUILT / packaged launch PASS
+After the managed-engine and paste changes, `npx electron out/main/index.js --self-test` again reported **12 checks, 0 failed**. The current profile has optional MCP packs enabled, so this run reported 203 tools across 18 groups. A follow-up `node scripts/ui-smoke.mjs` exited before a window because a LocalPilot instance already held the single-instance lock (Electron WebSocket `ECONNRESET`); that standard smoke rerun is **blocked**, not a pass.
 
-`npm run dist` exited 0 and produced:
+### Managed local engine, no-Ollama chat and Ctrl+V — PASS (isolated built-app profile)
 
-- `release/LocalPilot AI-Setup-0.1.1-x64.exe` — 137,169,268 bytes.
-- `release/LocalPilot-Portable-0.1.1.exe` — 119,906,224 bytes.
-- `release/latest.yml` — update metadata pointing at the normalized installer name.
-- `release/win-unpacked/` — unpacked application with `resources/app-update.yml`.
+A one-off Playwright Electron test launched `out/main/index.js` with an isolated `--user-data-dir=artifacts/runtime-test-profile`. It was not a packaged build and was removed after verification.
 
-`npm run smoke:packaged` launched `release/win-unpacked/LocalPilot AI.exe`: `isPackaged: true`, version 0.1.1, 57 tools, 9,035,776-byte database, renderer mounted, no page errors; the AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-home.png`.
+- **Engine:** `models.installLlamaRuntime()` resolved official llama.cpp `b12224`, selected the Vulkan Windows asset (36 MB reported), downloaded and extracted `llama-server.exe` under `runtime/llama.cpp`. `models.llamaRuntime()` returned installed/managed with version `b12224` and variant `Vulkan`.
+- **Model:** downloaded `Qwen/Qwen2.5-0.5B-Instruct-GGUF` / `qwen2.5-0.5b-instruct-q4_k_m.gguf` (491,400,032 bytes). The file was registered under **Local GGUF files**.
+- **Local chat:** started llama-server with `gpuLayers: 0`, loaded the model from the real Model library UI, and a real chat returned `LOCAL_READY`.
+- **Ollama disabled:** in the same isolated profile, disabled the Ollama provider. Enabled providers were LM Studio and llama.cpp; discovery returned only `llamacpp`; a second chat returned `NO_OLLAMA_READY`. No Ollama request was used for this run.
+- **Paste:** put a real PNG on the Windows clipboard with Windows Forms, focused the composer and pressed Ctrl+V. The UI showed one image attachment with a `data:image/png` data URL, and the Send button was enabled with empty composer text.
+- **UI evidence:** `artifacts/models-local-engine.png` and `artifacts/models-local-engine-running.png`; the latter shows the engine running and the local model selected.
+
+This verifies the managed engine install, a GGUF download through the model API, loading and selecting the model through the Model library UI, local chat without Ollama, and clipboard-image paste. It does not verify Vulkan GPU offload (the chat forced `gpuLayers: 0`) or the green catalog button’s download-completion refresh. The 0.1.2 packaged build is checked separately below, but the managed-engine flow was not repeated inside that package.
+
+### Installer, portable and packaged app — 0.1.2 BUILT / packaged launch PASS
+
+The 0.1.2 build used the same electron-builder NSIS and portable targets as `npm run dist`, written to `artifacts/release-0.1.2` because the already-running 0.1.1 packaged app locks `release/win-unpacked`. It produced:
+
+- `artifacts/release-0.1.2/LocalPilot AI-Setup-0.1.2-x64.exe` — 137,172,554 bytes.
+- `artifacts/release-0.1.2/LocalPilot AI-Setup-0.1.2-x64.exe.blockmap` — 143,415 bytes.
+- `artifacts/release-0.1.2/LocalPilot-Portable-0.1.2.exe` — 119,911,021 bytes.
+- `artifacts/release-0.1.2/latest.yml` — update metadata pointing at the normalized installer name.
+- `artifacts/release-0.1.2/win-unpacked/` — unpacked application with `resources/app-update.yml`.
+
+An isolated packaged launch used a temporary `--user-data-dir` to avoid the running app’s single-instance lock. It reported `isPackaged: true`, version 0.1.2, 57 tools, an 86,016-byte database, the managed llama.cpp API, and a mounted renderer with no page errors; the AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-0.1.2-home.png`.
 
 The NSIS installer was not installed/uninstalled on a clean machine, and the portable executable was not launched directly.
 
@@ -164,7 +180,10 @@ The NSIS installer was not installed/uninstalled on a clean machine, and the por
 | `artifacts/ai-test-overlay-fullscreen.png` | Overlay UI captured during the full-screen game test |
 | `artifacts/ai-test-overlay-scale-1_25.png` | Overlay at forced 125% scale |
 | `artifacts/ai-test-overlay-scale-1_5.png` | Overlay at forced 150% scale |
-| `artifacts/packaged-home.png` | Packaged app launched |
+| `artifacts/models-local-engine.png` | Model library local-engine card and installed engine |
+| `artifacts/models-local-engine-running.png` | Managed engine running with the downloaded GGUF selected |
+| `artifacts/packaged-home.png` | Packaged 0.1.1 app launched |
+| `artifacts/packaged-0.1.2-home.png` | Isolated packaged 0.1.2 app launched |
 | `artifacts/update-settings.png` | Settings → About live up-to-date check |
 | `artifacts/update-popup-available.png` | 0.1.0 update modal for 0.1.1 with progress and release notes |
 | `artifacts/update-popup-downloaded.png` | 0.1.1 downloaded, ready to install |
@@ -176,6 +195,7 @@ Artifacts contain real test conversations and desktop content; review before sha
 
 - Conversations, messages and activity remain in `%APPDATA%\LocalPilot AI\data\localpilot.db`.
 - Screenshots accumulate in `%APPDATA%\LocalPilot AI\captures`.
+- The isolated managed-engine test profile under `artifacts/runtime-test-profile` was removed after verification; the two model-library screenshots remain in `artifacts/`.
 - The self-test writes `data/selftest-report.json` and a probe file under `%APPDATA%\LocalPilot AI\selftest`.
 - The Notepad test closes only the Notepad process it detected as new.
 - The local-only test cleans up its endpoint and conversation.
@@ -188,7 +208,7 @@ Artifacts contain real test conversations and desktop content; review before sha
 - Portable executable direct launch.
 - Completing a version-to-version install after download; the 0.1.0 → 0.1.1 test stopped at the downloaded prompt without running the installer.
 - Windows 10, Chrome, actual multi-monitor hardware and OS-level per-monitor DPI scaling (forced app scaling was used).
-- LM Studio, llama.cpp/Vulkan and cloud provider runtime behavior.
+- LM Studio, external llama.cpp builds, Vulkan GPU offload and cloud provider runtime behavior. The managed engine was tested with CPU offload only.
 - Capability-warning branches (the test model reports tools, vision and thinking).
 - Native plugin installation through the UI (the example and host build exist; the MCP path was exercised).
 - Other full-screen games/engines; the exact exclusive/borderless mode used by Rocket League was not identified. Whether third-party capture tools honor Windows capture exclusion.

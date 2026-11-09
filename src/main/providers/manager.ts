@@ -235,7 +235,7 @@ class ProviderManager {
         path: ollamaPath ?? undefined,
         version: ollamaStatus?.version,
         installUrl: 'https://ollama.com/download/windows',
-        note: 'Easiest way to run local GGUF models on Windows. LocalPilot discovers existing models automatically.'
+        note: 'Optional. Existing Ollama models are discovered automatically; LocalPilot can run GGUF models with its own managed engine instead.'
       },
       {
         id: 'llamacpp',
@@ -245,7 +245,7 @@ class ProviderManager {
         running: llamaServer.running,
         path: llamaPath ?? undefined,
         installUrl: 'https://github.com/ggml-org/llama.cpp/releases',
-        note: 'Use a Vulkan build for AMD Radeon GPUs, or a CUDA build for NVIDIA. Point Settings → Models at llama-server.exe.'
+        note: 'LocalPilot can install the official Windows Vulkan or CPU build for you. A custom Vulkan/CUDA build can still be selected in Settings → Models.'
       },
       {
         id: 'lmstudio',

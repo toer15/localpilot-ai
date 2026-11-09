@@ -1,6 +1,6 @@
 {
   "name": "localpilot-ai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "LocalPilot AI — a local-first Windows AI workstation with agents, computer use, coding and plugins.",
   "main": "./out/main/index.js",
   "author": "LocalPilot AI",

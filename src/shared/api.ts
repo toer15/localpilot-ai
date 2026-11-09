@@ -13,6 +13,7 @@ import type {
   ConversationSummary,
   DownloadTask,
   HardwareInfo,
+  LlamaRuntimeStatus,
   LocalModelFile,
   McpServerConfig,
   MemoryItem,
@@ -62,10 +63,12 @@ export interface LocalPilotApi {
     unload(modelId: string, providerId: string): Promise<boolean>
     delete(modelId: string, providerId: string): Promise<boolean>
     show(modelId: string): Promise<Record<string, unknown>>
-    catalogSearch(query: string, source?: 'huggingface' | 'ollama'): Promise<ModelCatalogItem[]>
+    catalogSearch(query: string, source?: 'curated' | 'huggingface' | 'ollama'): Promise<ModelCatalogItem[]>
     hfFiles(repoId: string): Promise<{ name: string; sizeBytes?: number }[]>
     pullOllama(name: string): Promise<DownloadTask>
     downloadGguf(repoId: string, file: string): Promise<DownloadTask>
+    llamaRuntime(): Promise<LlamaRuntimeStatus>
+    installLlamaRuntime(): Promise<DownloadTask>
     downloads(): Promise<DownloadTask[]>
     cancelDownload(id: string): Promise<void>
     importGguf(): Promise<LocalModelFile | null>

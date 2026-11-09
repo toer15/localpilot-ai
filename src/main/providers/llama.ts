@@ -67,7 +67,7 @@ class LlamaServerManager {
     }
     if (!exe) {
       status.error =
-        'llama-server.exe was not found. Install a llama.cpp Windows build (Vulkan builds recommended for AMD) and set its path in Settings → Models.'
+        'The local engine is not installed. Open Model library → Local engine → Install local engine. Ollama is not required.'
       return status
     }
     if (!fs.existsSync(modelPath)) {

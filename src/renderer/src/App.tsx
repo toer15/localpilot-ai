@@ -666,6 +666,11 @@ export default function App() {
             await refreshModels()
             setHardware(await api.models.hardware(true))
           }}
+          onOpenModelLibrary={async () => {
+            await updateSettings({ general: { onboardingComplete: true } })
+            setShowOnboarding(false)
+            setPage('models')
+          }}
           onComplete={async (selection) => {
             const next = await updateSettings({
               general: { onboardingComplete: true },

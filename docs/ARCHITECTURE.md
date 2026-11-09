@@ -30,6 +30,7 @@ Main process (Node/Electron)
 - `settings.ts` — deep-merged settings store with default migration (legacy 8k context → 32k).
 - `agent/` — loop, prompts, context fitting, run state, cancellation.
 - `providers/` — capability discovery and chat transports; `llama.ts` manages a child `llama-server`.
+- `models/` — Hugging Face GGUF search/download, Ollama pulls, local model registry, and the managed llama.cpp runtime installer. The runtime downloader resolves the latest official Windows release, selects Vulkan or CPU from hardware detection, streams the archive with progress/cancellation, extracts it, and places `llama-server.exe` plus its DLLs under `runtime/llama.cpp`.
 - `tools/` — tool definitions and registry; `permissions.ts` implements approvals.
 - `computer/` — desktop automation; `script.ts` contains the C# engine, `index.ts` maps actions.
 - `computer/overlay.ts` — optional tester overlay: one window per display with DPI-correct bounds, primary-only banner, AI-owned green cursor positioned from mouse/UIA targets, target pulses, `moveTop()` z-order reassertion, global Esc registration and capture exclusion. It never polls the user's pointer. `src/preload/overlay.ts` is its isolated bridge.
@@ -60,7 +61,7 @@ The permission broker keeps pending requests, session approvals and “always”
 
 - **Ollama** uses `/api/tags`, `/api/show`, `/api/chat` with NDJSON streaming; sends native tools and images; enables thinking only when requested and supported.
 - **OpenAI-compatible** uses `/v1/models` and `/v1/chat/completions` with SSE streaming, tool calls and optional bearer token.
-- **llama.cpp** is an OpenAI-compatible provider plus a managed process that can be launched with GPU layers/context and stopped.
+- **llama.cpp** is an OpenAI-compatible provider plus a managed process that can be launched with GPU layers/context and stopped. The Model library downloads and installs the official Windows engine into the app data directory on demand, so users do not need a separate Ollama or llama.cpp installation. The app resolves the release from the public GitHub API, prefers the Vulkan build when hardware detection reports Vulkan, and falls back to the CPU build.
 
 `privacy.localOnly` is enforced in `ProviderManager`: non-loopback endpoints are marked blocked during discovery (no ping/model request), refused by `startProvider`, and rejected in `chat` with an explicit error. Web and browser tools report `enabled: false` and disappear from the registry. Loopback is `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`.
 
@@ -78,7 +79,7 @@ The optional tester overlay is a separate click-through window per `screen` disp
 
 ## Persistence
 
-SQLite tables: `settings`, `conversations`, `messages`, `projects`, `memories`, `plugins`, `activity`, `local_models`, `secrets`. Messages cascade-delete with conversations. Secrets are encrypted with Electron `safeStorage` before storage. The database is exported and atomically replaced on a debounce; shutdown forces a save.
+SQLite tables: `settings`, `conversations`, `messages`, `projects`, `memories`, `plugins`, `activity`, `local_models`, `secrets`. Messages cascade-delete with conversations. Secrets are encrypted with Electron `safeStorage` before storage. The database is exported and atomically replaced on a debounce; shutdown forces a save. The managed engine, model files and runtime marker live outside SQLite under `runtime/llama.cpp` and `models/`; they can be deleted independently.
 
 ## Security boundaries
 
@@ -90,6 +91,6 @@ SQLite tables: `settings`, `conversations`, `messages`, `projects`, `memories`, 
 
 ## Packaging and updates
 
-electron-builder creates a per-user NSIS installer and a portable executable for x64. `asar` is enabled; `sql.js` WASM and the native plugin host are unpacked. Renderer, preload and main bundles are built by electron-vite into `out/`. Builds are unsigned.
+electron-builder creates a per-user NSIS installer and a portable executable for x64. `asar` is enabled; `sql.js` WASM and the native plugin host are unpacked. Renderer, preload and main bundles are built by electron-vite into `out/`. Builds are unsigned. The llama.cpp engine and model weights are not bundled; they are downloaded on demand so the installer stays smaller.
 
 The `publish` configuration points at `toer15/localpilot-ai` on GitHub. Electron-builder writes `app-update.yml` into packaged resources and `latest.yml` next to the NSIS installer; `electron-updater` reads those through the GitHub Releases provider. The workflow in `.github/workflows/release.yml` builds and uploads those assets when a `v*` tag is pushed. Installed NSIS builds can therefore update; portable builds cannot install an NSIS update in place.

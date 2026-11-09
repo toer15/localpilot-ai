@@ -616,6 +616,26 @@ kbd {
   filter: brightness(1.04);
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
 }
+.btn-success {
+  background: linear-gradient(135deg, #2fb87b, var(--ok));
+  border-color: transparent;
+  color: #04140c;
+  font-weight: 650;
+}
+.btn-success:hover {
+  filter: brightness(1.06);
+  background: linear-gradient(135deg, #2fb87b, var(--ok));
+}
+.btn-success:disabled {
+  filter: saturate(0.55);
+}
+[data-theme="light"] .btn-success {
+  background: linear-gradient(135deg, #15803d, #0f766e);
+  color: #ffffff;
+}
+[data-theme="light"] .btn-success:hover {
+  background: linear-gradient(135deg, #15803d, #0f766e);
+}
 .btn-ghost {
   background: transparent;
   border-color: transparent;

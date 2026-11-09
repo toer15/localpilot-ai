@@ -14,15 +14,15 @@ Default endpoints:
 | --- | --- | --- | --- |
 | Ollama | native | `http://127.0.0.1:11434` | Auto-discovers installed models, native tools, vision, thinking. |
 | LM Studio | OpenAI-compatible | `http://127.0.0.1:1234` | Start LM Studio's local server first. |
-| llama.cpp server | OpenAI-compatible | `http://127.0.0.1:8080` | Can be launched by LocalPilot when `llama-server.exe` is configured. |
+| llama.cpp server | OpenAI-compatible | `http://127.0.0.1:8080` | LocalPilot can install and manage its own engine from the Model library; an external `llama-server.exe` can still be configured. |
 
 You can add custom OpenAI-compatible or Ollama endpoints. The default provider/model for new conversations is selectable here; the chat toolbar can override it per conversation.
 
 **Remote endpoints** are marked “remote / cloud” and are never made the default silently. Requests to them leave the computer. If you paste an API key for an OpenAI-compatible provider, it is encrypted with Electron `safeStorage`, which uses Windows DPAPI for your Windows user. Keys are not written to conversations or logs.
 
-**Model runtime** settings apply to requests and managed llama.cpp launches: temperature, top-p, max output tokens, context length (default 32768), GPU layers (`-1` means all), llama.cpp port, models folder, `llama-server.exe` path, auto-start and streaming.
+**Model runtime** settings apply to requests and managed llama.cpp launches: temperature, top-p, max output tokens, context length (default 32768), GPU layers (`-1` means all), llama.cpp port, models folder, `llama-server.exe` path, auto-start and streaming. Leave the path empty to use the engine installed by LocalPilot.
 
-The **Model library** discovers installed models, pulls Ollama models, searches Hugging Face for GGUF repositories, downloads a chosen quantization, imports local GGUF files, and can launch a GGUF through llama.cpp. Downloads are cancellable.
+The **Model library** has a **Local engine** card that installs the official llama.cpp Windows Vulkan or CPU build on demand. No Ollama installation or running background app is required for downloaded GGUF files. The recommended GGUF catalog has green **Download** buttons; choosing a file opens the available quantizations. **Load & use** starts the managed engine and selects the model. Downloads, engine installs and Ollama pulls show progress and can be cancelled. The library also discovers installed models, searches Hugging Face, imports local GGUF files, and can pull from the Ollama library when Ollama is available.
 
 The context setting is a ceiling, not a guarantee. The agent fits system prompt, tool schemas, output budget and history into the configured/model context. Legacy 8k settings are migrated to 32k automatically.
 
@@ -77,6 +77,6 @@ Log level, request timeout (default 240000 ms), custom system prompt appended af
 
 ## Files and ports
 
-- Data: `%APPDATA%\LocalPilot AI` (`data\localpilot.db`, `logs\main.log`, `models\`, `captures\`, `plugins\`, `browser\`).
+- Data: `%APPDATA%\LocalPilot AI` (`data\localpilot.db`, `logs\main.log`, `models\`, `runtime\llama.cpp\`, `captures\`, `plugins\`, `browser\`).
 - Ollama `11434`, LM Studio `1234`, llama.cpp `8080` by default. Change llama.cpp's port in Settings if it conflicts.
 - MCP stdio servers are child processes; MCP HTTP servers use their configured URL. GitHub MCP needs `GITHUB_PERSONAL_ACCESS_TOKEN` in its server environment; never paste it into chat.

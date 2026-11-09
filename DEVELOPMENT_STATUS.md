@@ -1,13 +1,14 @@
-# Development status — LocalPilot AI 0.1.1
+# Development status — LocalPilot AI 0.1.2
 
-Last updated: 9 November 2026. Test machine: Windows 11 x64, AMD Ryzen 7 9800X3D, 31.2 GB RAM, AMD Radeon RX 9070 XT 15.9 GB (Vulkan), Node 26.13.0, Ollama 0.40.15, model `qwen3.6:27b` (reports tools, vision and thinking).
+Last updated: 9 November 2026. Test machine: Windows 11 x64, AMD Ryzen 7 9800X3D, 31.2 GB RAM, AMD Radeon RX 9070 XT 15.9 GB (Vulkan), Node 26.13.0, Ollama 0.40.15, model `qwen3.6:27b` (reports tools, vision and thinking). Release 0.1.2 packages the managed-engine, model-library and clipboard-paste work. The flow was tested against the built source app and an isolated packaged 0.1.2 build; the public release is produced by the `v0.1.2` tag workflow.
 
 This document separates **implemented**, **verified**, and **not yet verified**. A build existing is not the same as an installed build being tested.
 
 ## Implemented
 
 - Electron + React + TypeScript desktop app with context-isolated preload, typed IPC, dark/light UI, onboarding, chat, streaming, tool cards, approvals, stop, attachments, right workspace panel.
-- Local model providers: Ollama (NDJSON, native tools, vision, thinking), OpenAI-compatible SSE (LM Studio, llama.cpp, custom), managed llama.cpp launch with GGUF import. Model discovery, capability reporting/inference, Hugging Face GGUF search/download, Ollama pulls.
+- Local model providers: Ollama (NDJSON, native tools, vision, thinking), OpenAI-compatible SSE (LM Studio, llama.cpp, custom), and a managed llama.cpp engine. The Model library can install the official llama.cpp Windows Vulkan or CPU build without Ollama, download recommended GGUF models with green buttons and quantization choices, import or load local files, and shows cancellable progress for engine installs, model downloads and Ollama pulls. Model discovery, capability reporting/inference and Hugging Face search remain available.
+- Chat attachments: file picker, desktop screenshot, and Ctrl+V clipboard-image paste. Image-only messages are allowed; the composer enables Send when an attachment is present even with no text.
 - Agent: profiles, tool protocol selection, planning loop, per-tool approvals, session approvals, cancellation, emergency stop, activity log, conversation persistence, context fitting to a token budget, one screenshot per iteration, tool-result caps, capability notices.
 - 57 enabled built-in tools across 12 groups by default; 60 when the optional tester pack is installed. Groups: files, projects, terminal, Git, web, browser, computer, windows, UIA, memory, system, agents, testing. Tool groups disappear when their built-in pack is disabled or uninstalled.
 - Windows Computer Use: PowerShell/C# P/Invoke + UI Automation; screenshots, windows, launch, focus, minimize/maximize/close, mouse, keyboard, UIA inspect/find/click/set value.
@@ -23,13 +24,18 @@ This document separates **implemented**, **verified**, and **not yet verified**.
 
 | Requirement | Evidence | Status |
 | --- | --- | --- |
-| TypeScript and production bundles | `npm run typecheck`, `npm run build` and `npm run dist` after the independent AI cursor and updater changes | **Pass** |
+| TypeScript and production bundles | `npm run typecheck`, `npm run build` and `npm run dist` after the independent AI cursor and updater changes; 0.1.2 release build passed typecheck, production build and electron-builder packaging | **Pass** |
+| Managed llama.cpp engine install | Isolated Electron profile: `models.installLlamaRuntime()` resolved the official `b12224` Vulkan release, downloaded it, extracted `llama-server.exe` into `runtime/llama.cpp`, and `models.llamaRuntime()` reported installed/managed with version and variant | **Pass** |
+| Local model download, selection and chat | Isolated profile: downloaded Qwen2.5 0.5B Instruct Q4_K_M (491,400,032 bytes), started llama-server, loaded and selected the model from the real Model library UI, and returned `LOCAL_READY` in a real chat | **Pass, CPU offload (`gpuLayers: 0`)** |
+| No-Ollama inference | Same isolated profile with Ollama disabled: enabled providers were LM Studio and llama.cpp; discover returned only `llamacpp`; the local chat returned `NO_OLLAMA_READY` | **Pass** |
+| Ctrl+V image paste | Windows clipboard image pasted into the real composer: one image attachment with a data URL; Send was enabled with empty composer text | **Pass** |
+| Standard UI smoke rerun | `node scripts/ui-smoke.mjs` was attempted after the self-test but exited before a window because another LocalPilot instance held the single-instance lock (Electron WebSocket ECONNRESET). The new flow was tested in an isolated profile instead; no product failure was observed | **Blocked, not a pass** |
 | Update metadata and packaged updater | `npm run dist`: `latest.yml` and `app-update.yml` generated; 38 `electron-updater` files in `app.asar`; `npm run smoke:packaged`: packaged app 0.1.0, `isPackaged: true`, 57 tools | **Pass** |
 | Published GitHub releases | `v0.1.0` and `v0.1.1` workflows passed; the 0.1.1 release has the installer, blockmap, portable build and `latest.yml`; publishing is deterministic through `gh release` | **Pass** |
 | Live GitHub update check | Packaged 0.1.0 and 0.1.1 apps: Settings → About → **Check for updates** reached GitHub and returned up to date; no modal for the current version | **Pass** |
 | Update prompt/download from a newer release | Preserved 0.1.0 packaged app against published 0.1.1: modal named 0.1.1, showed release notes, download reached `downloaded`/100%, and **Later** preserved the downloaded state | **Pass; final install/restart not run** |
 | Final regression re-run | `npx electron out/main/index.js --self-test`: 12/12 checks; `SMOKE_PERSIST=1 npm run smoke`: local `UI_READY`, 57 tools with the optional pack uninstalled, settings and conversations persisted across restart | **Pass** |
-| Built-in self-test | `npx electron out/main/index.js --self-test`: 12 checks, 0 failed (SQLite, hardware, providers, models, real local inference, tool registry, project files + traversal guard, PowerShell, 2560×1440 screenshot, Playwright Edge, MCP SDK, local-only prerequisites) | **Pass** |
+| Built-in self-test | `npx electron out/main/index.js --self-test`: 12 checks, 0 failed (SQLite, hardware, providers, models, real local inference, tool registry, project files + traversal guard, PowerShell, 2560×1440 screenshot, Playwright Edge, MCP SDK, local-only prerequisites). The latest run used the current profile with optional MCP packs enabled and reported 203 tools; the 57-tool baseline below is from the clean profile. | **Pass** |
 | Real local Ollama chat in the UI | UI smoke: streamed `UI_READY`; persisted conversation with `providerId: ollama`, `modelId: qwen3.6:27b` | **Pass** |
 | Project files through the agent | `SMOKE_TOOLS=1`: approved `files.write` and `files.read`, created `smoke.txt` with `UI_TOOL_OK` | **Pass** |
 | PowerShell through tools | Self-test marker plus approved `terminal.run` during acceptance | **Pass** |
@@ -45,18 +51,18 @@ This document separates **implemented**, **verified**, and **not yet verified**.
 | Stop / cancellation | Stop during a 120-second `terminal.run`: run became inactive, tool status showed stopped | **Pass** |
 | Persistence across restart | `SMOKE_PERSIST=1`: dark theme, onboarding complete, default provider/model and 3 conversations survived a real app restart | **Pass** |
 | Local-only enforcement | `npm run acceptance:localonly`: remote endpoint blocked during discovery, startup and chat; web/browser tools absent; agent run ended with a local-only error and no active run | **Pass** |
-| Installer and portable build | `npm run dist` exit 0; NSIS 137,169,268 bytes, portable 119,906,224 bytes; `latest.yml` 0.1.1 and `app-update.yml` present | **Built** |
-| Packaged app starts | `npm run smoke:packaged`: packaged app 0.1.1, `isPackaged: true`, 57 tools, 9,035,776-byte database, renderer mounted; AI test overlay started and stopped (1 overlay window) | **Pass** |
+| Installer and portable build | 0.1.2: electron-builder NSIS + portable exited 0; NSIS 137,172,554 bytes, blockmap 143,415 bytes, portable 119,911,021 bytes; `latest.yml` 0.1.2 and `app-update.yml` present. Written to `artifacts/release-0.1.2` because the running 0.1.1 packaged app locks `release/win-unpacked`; same targets as `npm run dist` | **Built** |
+| Packaged app starts | Isolated 0.1.2 packaged build: `isPackaged: true`, 57 tools, 86,016-byte database, renderer mounted, managed llama.cpp API present; AI test overlay started and stopped (1 overlay window) | **Pass** |
 | NSIS install/uninstall on a clean machine | Not run | **Not verified** |
 | Portable executable launch | Not run (the unpacked packaged app was launched) | **Not verified** |
 
-Test artifacts: `artifacts/ui-home.png`, `ui-chat.png`, `ui-tools.png`, `ui-browser.png`, `ui-stopped.png`, `notepad-interaction.png`, `ai-test-overlay.png`, `ai-test-overlay-fullscreen.png`, `ai-test-overlay-scale-1_25.png`, `ai-test-overlay-scale-1_5.png`, `packaged-home.png`. These contain real local test conversations and, for the desktop screenshots, the test desktop; review before sharing. The temporary Rocket League capture was deleted.
+Test artifacts: `artifacts/ui-home.png`, `ui-chat.png`, `ui-tools.png`, `ui-browser.png`, `ui-stopped.png`, `notepad-interaction.png`, `ai-test-overlay.png`, `ai-test-overlay-fullscreen.png`, `ai-test-overlay-scale-1_25.png`, `ai-test-overlay-scale-1_5.png`, `models-local-engine.png`, `models-local-engine-running.png`, `packaged-home.png`, `packaged-0.1.2-home.png`. These contain real local test conversations and, for the desktop screenshots, the test desktop; review before sharing. The temporary Rocket League capture was deleted. The isolated runtime-test profile was removed after verification; only the screenshots remain.
 
 ## Known limitations
 
 - **Unsigned builds.** No code-signing certificate is configured. SmartScreen may warn. Updates use public GitHub Releases; portable builds do not self-update. The 0.1.0 → 0.1.1 modal and download were exercised, but the final NSIS restart/install was not run.
 - **Installer not exercised.** NSIS packaging succeeded, but no clean-machine install/uninstall, non-admin install, upgrade or uninstall-data-retention test was performed.
-- **One model/runtime exercised.** Ollama with `qwen3.6:27b` on Windows 11. LM Studio, llama.cpp server, AMD Vulkan llama.cpp offload and cloud/OpenAI-compatible providers were not runtime-tested despite being implemented.
+- **Two runtimes exercised.** Ollama with `qwen3.6:27b`, and the managed llama.cpp `b12224` engine with Qwen2.5 0.5B Q4_K_M on CPU offload (`gpuLayers: 0`). Vulkan GPU offload, LM Studio, external llama.cpp builds and cloud/OpenAI-compatible providers were not runtime-tested despite being implemented. The managed engine selected its Vulkan build, but this test forced CPU offload.
 - **Native plugins are not sandboxed.** They run in a forked Electron child process with IPC but with the user's OS privileges. Manifest permissions are shown to the user but are not enforced by the OS.
 - **MCP servers are third-party.** Presets run `npx`/`uvx` servers with user privileges. Local-only mode guards LocalPilot's own providers and internet tools; it cannot contain network access inside an enabled MCP server or native plugin.
 - **Capability warnings untested.** The only installed model reports tools/vision/thinking. Warning branches for non-vision attachments or non-thinking reasoning were not exercised.
@@ -71,7 +77,7 @@ Test artifacts: `artifacts/ui-home.png`, `ui-chat.png`, `ui-tools.png`, `ui-brow
 1. Test actual multi-monitor hardware and OS-level per-monitor DPI scaling, including moving the AI cursor and the real pointer between displays.
 2. Try additional full-screen games/engines and exclusive-fullscreen modes; confirm the overlay raises above each one.
 3. Install the NSIS package on a clean Windows 10 and Windows 11 VM; verify shortcuts, upgrade, uninstall and data retention.
-4. Test LM Studio and a Vulkan llama.cpp build on AMD, including GPU layer counts and VRAM failure behavior.
+4. Run the managed llama.cpp engine with Vulkan GPU offload and varied GPU layer counts, including VRAM failure behavior.
 5. Exercise capability-warning paths with a non-vision model and with attachments.
 6. Test Chrome and screen-reader/keyboard-only use.
 7. Add an OS-level sandbox or explicit review gate for native plugins; document MCP network isolation.

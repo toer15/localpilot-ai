@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import type {
   AppSettings,
   Attachment,
@@ -46,6 +46,17 @@ const REASONING: { value: ReasoningEffort; label: string }[] = [
   { value: 'max', label: 'Maximum' },
   { value: 'ultra', label: 'Ultra (if supported)' }
 ]
+
+const MAX_PASTED_IMAGE_BYTES = 12 * 1024 * 1024
+
+function readImageAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the pasted image.'))
+    reader.readAsDataURL(file)
+  })
+}
 
 const SUGGESTIONS: { icon: IconName; title: string; sub: string; prompt: string }[] = [
   {
@@ -299,12 +310,47 @@ export function ChatView(props: Props) {
 
   const submit = async (override?: string) => {
     const value = (override ?? text).trim()
-    if (!value || running || !selected) return
+    if ((!value && !attachments.length) || running || !selected) return
     setText('')
     setAttachments([])
     setComposerError(null)
     stick.current = true
     await onSend(value, attachments)
+  }
+
+  const handlePaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (running) return
+    const imageItems = Array.from(event.clipboardData.items).filter(
+      (item) => item.kind === 'file' && item.type.startsWith('image/')
+    )
+    if (!imageItems.length) return
+    event.preventDefault()
+    setComposerError(null)
+    const next: Attachment[] = []
+    for (const item of imageItems) {
+      const file = item.getAsFile()
+      if (!file) continue
+      if (file.size > MAX_PASTED_IMAGE_BYTES) {
+        setComposerError('Pasted image is larger than 12 MB. Copy a smaller screenshot and try again.')
+        continue
+      }
+      try {
+        const dataUrl = await readImageAsDataUrl(file)
+        const extension = file.type === 'image/jpeg' ? 'jpg' : (file.type.split('/')[1] || 'png')
+        next.push({
+          id: crypto.randomUUID(),
+          name: `Pasted image ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.${extension}`,
+          path: '',
+          kind: 'image',
+          mime: file.type,
+          size: file.size,
+          dataUrl
+        })
+      } catch (err) {
+        setComposerError(`Could not paste image: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    if (next.length) setAttachments((prev) => [...prev, ...next])
   }
 
   const attachFiles = async () => {
@@ -581,6 +627,7 @@ export function ChatView(props: Props) {
                 }
                 disabled={running}
                 onChange={(e) => setText(e.target.value)}
+                onPaste={(event) => void handlePaste(event)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault()
@@ -606,7 +653,7 @@ export function ChatView(props: Props) {
                     <Icon name="stop" size={11} /> Stop
                   </button>
                 ) : (
-                  <button className="send-btn" type="button" onClick={() => void submit()} disabled={!text.trim() || !selected} title="Send">
+                  <button className="send-btn" type="button" onClick={() => void submit()} disabled={(!text.trim() && !attachments.length) || !selected} title="Send">
                     <Icon name="arrow-right" size={15} />
                   </button>
                 )}
@@ -614,7 +661,7 @@ export function ChatView(props: Props) {
             </div>
             <div className="composer-foot">
               <span className="hint">
-                <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline
+                <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline · <kbd>Ctrl</kbd>+<kbd>V</kbd> paste image
               </span>
               <span className="grow" />
               {toolsUnsupported ? <span className="badge warn">native tools not reported</span> : null}

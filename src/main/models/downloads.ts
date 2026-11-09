@@ -1,14 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { DownloadTask, LocalModelFile } from '@shared/types'
+import type { DownloadTask, LlamaRuntimeStatus, LocalModelFile } from '@shared/types'
 import { settings } from '../settings'
 import { getSecret } from '../secrets'
 import { getPaths, safeFileName } from '../core/paths'
 import { all, get, run } from '../db'
 import { log } from '../core/logger'
 import { recordActivity } from '../activity'
-import { iterateNdjson } from '../providers/http'
+import { fetchJson, iterateNdjson } from '../providers/http'
+import { llamaServer } from '../providers/llama'
+import { detectHardware } from '../hardware'
+import { runPowerShell, runProcess } from '../core/proc'
 
 const tasks = new Map<string, DownloadTask>()
 const controllers = new Map<string, AbortController>()
@@ -30,6 +33,243 @@ function update(id: string, patch: Partial<DownloadTask>) {
   const current = tasks.get(id)
   if (!current) return
   tasks.set(id, { ...current, ...patch, updatedAt: new Date().toISOString() })
+}
+
+const LLAMA_RELEASES_URL = 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10'
+
+interface GitHubAsset {
+  name: string
+  browser_download_url: string
+  size?: number
+}
+
+interface GitHubRelease {
+  tag_name: string
+  assets?: GitHubAsset[]
+}
+
+interface RuntimeMarker {
+  tag?: string
+  asset?: string
+  variant?: string
+  installedAt?: string
+}
+
+export function llamaRuntimeRoot() {
+  return path.join(getPaths().userData, 'runtime', 'llama.cpp')
+}
+
+function runtimeMarkerPath() {
+  return path.join(llamaRuntimeRoot(), 'runtime.json')
+}
+
+function readRuntimeMarker(): RuntimeMarker {
+  try {
+    return JSON.parse(fs.readFileSync(runtimeMarkerPath(), 'utf8')) as RuntimeMarker
+  } catch {
+    return {}
+  }
+}
+
+/** Reports whether the app-managed or a user-configured llama-server.exe is usable. */
+export async function llamaRuntimeStatus(): Promise<LlamaRuntimeStatus> {
+  const resolved = await llamaServer.resolvePath()
+  const marker = readRuntimeMarker()
+  const root = llamaRuntimeRoot()
+  return {
+    installed: Boolean(resolved),
+    running: llamaServer.running,
+    path: resolved ?? undefined,
+    version: marker.tag,
+    variant: marker.variant,
+    managed: resolved ? resolved.toLowerCase().startsWith(root.toLowerCase()) : false
+  }
+}
+
+function findFileRecursive(dir: string, name: string): string | null {
+  let entries: fs.Dirent[] = []
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name)
+    if (entry.isFile() && entry.name.toLowerCase() === name.toLowerCase()) return full
+    if (entry.isDirectory()) {
+      const nested = findFileRecursive(full, name)
+      if (nested) return nested
+    }
+  }
+  return null
+}
+
+function powerShellQuote(value: string) {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+/**
+ * Downloads the official llama.cpp Windows build into LocalPilot's own runtime
+ * folder. No Ollama or external llama.cpp installation is required afterwards.
+ */
+export async function downloadLlamaRuntime(): Promise<DownloadTask> {
+  const existing = listDownloads().find(
+    (task) => task.kind === 'runtime' && (task.status === 'running' || task.status === 'queued')
+  )
+  if (existing) return existing
+
+  const task: DownloadTask = {
+    id: randomUUID(),
+    name: 'llama.cpp local engine',
+    kind: 'runtime',
+    status: 'queued',
+    progress: 0,
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+  tasks.set(task.id, task)
+  const controller = new AbortController()
+  controllers.set(task.id, controller)
+
+  void (async () => {
+    update(task.id, { status: 'running' })
+    const runtimeRoot = llamaRuntimeRoot()
+    const runtimeParent = path.dirname(runtimeRoot)
+    const zipPath = path.join(runtimeParent, `llama-runtime-${task.id}.zip`)
+    const tempDir = path.join(runtimeParent, `llama-runtime-${task.id}`)
+    let output: fs.WriteStream | null = null
+    try {
+      fs.mkdirSync(runtimeParent, { recursive: true })
+      const releases = await fetchJson<GitHubRelease[]>(LLAMA_RELEASES_URL, {
+        timeoutMs: 25000,
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'LocalPilotAI/0.1'
+        }
+      })
+      const release = (releases ?? []).find((item) =>
+        item.assets?.some((asset) => /-bin-win-(vulkan|cpu)-x64\.zip$/i.test(asset.name))
+      )
+      if (!release) throw new Error('No Windows llama.cpp build was found in the latest releases.')
+
+      const hardware = await detectHardware()
+      const preferred = hardware.acceleration.vulkan
+        ? ['win-vulkan-x64.zip', 'win-cpu-x64.zip']
+        : ['win-cpu-x64.zip', 'win-vulkan-x64.zip']
+      let asset: GitHubAsset | undefined
+      for (const suffix of preferred) {
+        asset = release.assets?.find((candidate) => candidate.name.toLowerCase().endsWith(suffix))
+        if (asset) break
+      }
+      if (!asset) throw new Error('The llama.cpp release has no Windows Vulkan or CPU build.')
+      const variant = /vulkan/i.test(asset.name) ? 'Vulkan' : 'CPU'
+      update(task.id, {
+        name: `llama.cpp ${release.tag_name} (${variant})`,
+        totalBytes: asset.size
+      })
+
+      const res = await fetch(asset.browser_download_url, {
+        headers: { 'User-Agent': 'LocalPilotAI/0.1' },
+        redirect: 'follow',
+        signal: controller.signal
+      })
+      if (!res.ok) throw new Error(`llama.cpp download failed (${res.status} ${res.statusText}).`)
+      if (!res.body) throw new Error('llama.cpp download returned an empty response.')
+      const total = Number(res.headers.get('content-length') ?? asset.size ?? 0)
+      const reader = res.body.getReader()
+      output = fs.createWriteStream(zipPath)
+      let received = 0
+      const started = Date.now()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (!value) continue
+        received += value.byteLength
+        if (!output.write(Buffer.from(value))) {
+          await new Promise<void>((resolve) => output?.once('drain', () => resolve()))
+        }
+        update(task.id, {
+          progress: total ? Math.min(96, Math.round((received / total) * 96)) : task.progress,
+          receivedBytes: received,
+          totalBytes: total || undefined,
+          speedBps: received / Math.max(1, (Date.now() - started) / 1000)
+        })
+      }
+      await new Promise<void>((resolve, reject) => {
+        if (!output) return resolve()
+        output.once('error', reject)
+        output.end(() => resolve())
+      })
+      output = null
+      if (controller.signal.aborted) throw new Error('Download cancelled.')
+
+      update(task.id, { progress: 97 })
+      fs.rmSync(tempDir, { recursive: true, force: true })
+      fs.mkdirSync(tempDir, { recursive: true })
+      const tar = await runProcess('tar', ['-xf', zipPath, '-C', tempDir], { timeoutMs: 120000 })
+      if (tar.code !== 0) {
+        const fallback = await runPowerShell(
+          `$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath ${powerShellQuote(zipPath)} -DestinationPath ${powerShellQuote(tempDir)} -Force`,
+          { timeoutMs: 120000 }
+        )
+        if (fallback.code !== 0) {
+          throw new Error(`Could not extract the llama.cpp archive. ${fallback.stderr.slice(0, 500)}`)
+        }
+      }
+      if (controller.signal.aborted) throw new Error('Download cancelled.')
+
+      const server = findFileRecursive(tempDir, 'llama-server.exe')
+      if (!server) throw new Error('The llama.cpp archive did not contain llama-server.exe.')
+      const sourceDir = path.dirname(server)
+      fs.rmSync(runtimeRoot, { recursive: true, force: true })
+      fs.mkdirSync(runtimeRoot, { recursive: true })
+      for (const entry of fs.readdirSync(sourceDir)) {
+        fs.cpSync(path.join(sourceDir, entry), path.join(runtimeRoot, entry), {
+          recursive: true,
+          force: true
+        })
+      }
+      const marker: RuntimeMarker = {
+        tag: release.tag_name,
+        asset: asset.name,
+        variant,
+        installedAt: new Date().toISOString()
+      }
+      fs.writeFileSync(runtimeMarkerPath(), JSON.stringify(marker, null, 2), 'utf8')
+      update(task.id, {
+        status: 'done',
+        progress: 100,
+        filePath: path.join(runtimeRoot, 'llama-server.exe'),
+        receivedBytes: received,
+        totalBytes: total || received
+      })
+      recordActivity('runtime-install', `Installed llama.cpp ${release.tag_name} (${variant})`)
+      log.info('downloads', `Installed managed llama.cpp ${release.tag_name} (${variant})`)
+    } catch (err) {
+      output?.destroy()
+      const aborted = controller.signal.aborted
+      update(task.id, {
+        status: aborted ? 'cancelled' : 'error',
+        error: aborted ? undefined : err instanceof Error ? err.message : String(err)
+      })
+      if (!aborted) log.warn('downloads', 'llama.cpp runtime download failed', String(err))
+    } finally {
+      try {
+        fs.rmSync(zipPath, { force: true })
+      } catch {
+        // ignore
+      }
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      } catch {
+        // ignore
+      }
+      controllers.delete(task.id)
+    }
+  })()
+
+  return task
 }
 
 export async function pullOllamaModel(name: string): Promise<DownloadTask> {

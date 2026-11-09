@@ -4,13 +4,14 @@ LocalPilot AI is a local-first AI workstation for Windows. It runs a real agent 
 
 Installed builds update themselves from [GitHub Releases](https://github.com/toer15/localpilot-ai/releases): they check at launch and every four hours, download in the background, show an in-app prompt, and restart only when you choose. **Settings → About → Check for updates** also checks manually.
 
-**Version 0.1.1** · Windows 10/11 x64 · Electron 45 · React 19 · TypeScript 7 · SQLite
+**Version 0.1.2** · Windows 10/11 x64 · Electron 45 · React 19 · TypeScript 7 · SQLite
 
 ![LocalPilot AI home](docs/images/ui-home.png)
 
 ## What it does
 
-- **Local inference** through Ollama, LM Studio, llama.cpp server or any OpenAI-compatible endpoint. Existing models are discovered automatically; GGUF files can be imported and searched on Hugging Face; Ollama models can be pulled from the model library.
+- **Local inference without Ollama**: download a managed llama.cpp engine from the Model library and run GGUF models directly. Ollama, LM Studio and custom OpenAI-compatible endpoints are still detected when present.
+- **A one-click local model library**: recommended GGUF models have green **Download** buttons with quantization choices, and downloaded/imported files can be loaded with **Load & use**. Engine installs, model downloads and Ollama pulls show progress and can be cancelled.
 - **A real agent loop** with native or text tool calling, per-tool approvals, cancellation, an emergency stop, vision feedback and context budgeting.
 - **Windows Computer Use** on the actual desktop: screenshots, mouse, keyboard, window control, and Windows UI Automation for accessible, less brittle interaction.
 - **AI App & Game Tester plugin** (installable from the marketplace): a DPI-correct click-through overlay on every display, an independent green AI cursor that moves only when the AI acts, a full-screen takeover border and an on-screen “Press Esc to stop testing” prompt. It stays above topmost full-screen games without taking focus.
@@ -25,29 +26,25 @@ Two Windows x64 builds are produced in `release/`:
 
 | Build | File |
 | --- | --- |
-| Installer (per-user NSIS) | `LocalPilot AI-Setup-0.1.1-x64.exe` |
-| Portable | `LocalPilot-Portable-0.1.1.exe` |
+| Installer (per-user NSIS) | `LocalPilot AI-Setup-0.1.2-x64.exe` |
+| Portable | `LocalPilot-Portable-0.1.2.exe` |
 
 The builds are **not code-signed**, so Windows SmartScreen may warn. Verify the source and choose “More info → Run anyway” only if you trust the build. The installer does not require administrator rights; it installs for the current user and can create desktop and Start Menu shortcuts. Installed NSIS builds use GitHub Releases for in-app updates; the portable executable does not self-update — download a newer portable build manually.
 
-You still need a local model runtime. [Ollama](https://ollama.com/download/windows) is the easiest option:
+You do **not** need to install Ollama. Launch LocalPilot, open **Model library → Local engine → Install local engine**, then download a model from the recommended GGUF catalog and use **Load & use**. The engine and models download on first use; no separate server needs to be running.
 
-```powershell
-ollama pull qwen3:8b
-ollama serve
-```
-
-Then launch LocalPilot, complete or skip the setup wizard, pick the model in the chat toolbar and start a conversation. See [docs/INSTALLATION.md](docs/INSTALLATION.md) for details.
+If you already use [Ollama](https://ollama.com/download/windows) or LM Studio, LocalPilot detects those models automatically, and Ollama pulls are still available in the library. See [docs/INSTALLATION.md](docs/INSTALLATION.md) for details.
 
 ## Requirements
 
 - Windows 10 or Windows 11, x64.
-- 8 GB RAM minimum for small models; 16 GB+ and a GPU with sufficient VRAM recommended. LocalPilot detects hardware but does not bundle a runtime.
-- A local runtime (Ollama, LM Studio, llama.cpp) or an explicitly configured compatible endpoint.
+- 8 GB RAM minimum for small models; 16 GB+ and a GPU with sufficient VRAM recommended. LocalPilot detects hardware but does not bundle the engine.
+- An internet connection for the first managed-engine and model download. After that, inference runs locally.
+- Ollama, LM Studio, llama.cpp or an OpenAI-compatible endpoint are optional; the managed engine is enough on its own.
 - Node.js only for development, `npx`-based MCP presets, or the MCP Git preset (`uv`/`uvx`).
 - Microsoft Edge or Google Chrome for built-in browser automation.
 
-AMD GPUs work through the runtime you choose; no ROCm installation is assumed. For llama.cpp on Radeon, use a Vulkan build. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+AMD GPUs use the managed llama.cpp Vulkan build when Vulkan is reported, with a CPU fallback; no ROCm installation is assumed. The managed engine is downloaded from the official [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases). See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Development
 
@@ -100,13 +97,14 @@ Application data lives under `%APPDATA%\LocalPilot AI`:
 
 - `data/localpilot.db` — SQLite database (conversations, projects, settings, plugins, memory, activity, encrypted secrets).
 - `models/`, `plugins/`, `captures/`, `browser/`, `logs/`.
+- `runtime/llama.cpp/` — the managed `llama-server.exe` engine and its DLLs, downloaded on demand.
 - `logs/main.log` and `data/selftest-report.json`.
 
 No conversations, prompts, files or credentials are sent to a cloud service by default. Installed builds contact GitHub Releases for update metadata only; update checks do not upload project data. **Local-only mode** (Settings → Privacy) blocks non-loopback AI endpoints during discovery, startup and chat, and removes web and browser tools from the agent. Third-party MCP servers and native plugin code run outside those controls; install only software you trust. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security-boundaries).
 
 ## Status and limitations
 
-Implemented and exercised on Windows 11 x64 with Ollama and `qwen3.6:27b`: real local chat, project file tools, PowerShell, desktop screenshots, Notepad interaction, browser automation, MCP install/tool discovery/removal, plugin revocation, cancellation, local-only blocking, the installable AI tester overlay with a real Esc stop, Rocket League full-screen layering, forced 125%/150% DPI checks, persistence across restart, and a packaged app launch. The packaged app's Settings → About update check reached the live GitHub release and reported current; a preserved 0.1.0 build detected 0.1.1, showed the update modal with release notes and downloaded it to 100%. The final installer restart was not run. The builds are unsigned. The NSIS installer was built but not installed on a clean machine, and actual multi-monitor hardware was not available. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the full matrix and [docs/TESTING.md](docs/TESTING.md) for exact commands and results.
+Implemented and exercised on Windows 11 x64 with Ollama, `qwen3.6:27b` and a managed llama.cpp b12224 engine: real local chat, project file tools, PowerShell, desktop screenshots, Notepad interaction, browser automation, MCP install/tool discovery/removal, plugin revocation, cancellation, local-only blocking, the installable AI tester overlay with a real Esc stop, Rocket League full-screen layering, forced 125%/150% DPI checks, persistence across restart, and a packaged app launch. A fresh profile downloaded the managed engine and a Qwen2.5 0.5B Q4_K_M GGUF, started llama-server, selected the model in the UI, and completed a real `LOCAL_READY` chat; repeating the chat with Ollama disabled returned `NO_OLLAMA_READY` using only llama.cpp. Ctrl+V attached a real Windows clipboard screenshot, including image-only Send. The packaged app's Settings → About update check reached the live GitHub release and reported current; a preserved 0.1.0 build detected 0.1.1, showed the update modal with release notes and downloaded it to 100%. The final installer restart was not run. The builds are unsigned. The NSIS installer was built but not installed on a clean machine, and actual multi-monitor hardware was not available. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the full matrix and [docs/TESTING.md](docs/TESTING.md) for exact commands and results.
 
 Native plugins execute in a forked child process, not an OS-level sandbox. MCP presets launch third-party servers through `npx`/`uvx` and are not audited by LocalPilot. Local-only mode cannot restrict code inside an explicitly enabled MCP server or native plugin.
 

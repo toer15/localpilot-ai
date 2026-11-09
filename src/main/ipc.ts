@@ -23,7 +23,7 @@ import { createProject, getActiveProject, getProject, listProjects, projectFiles
 import { listMemories, removeMemory, saveMemory, updateMemory } from './memory'
 import { listActivity, clearActivity } from './activity'
 import { pluginManager } from './plugins/manager'
-import { listDownloads, pullOllamaModel, downloadGguf, cancelDownload, hfFiles, importLocalModel, listLocalModels, removeLocalModel } from './models/downloads'
+import { listDownloads, pullOllamaModel, downloadGguf, cancelDownload, hfFiles, importLocalModel, listLocalModels, removeLocalModel, llamaRuntimeStatus, downloadLlamaRuntime } from './models/downloads'
 import { catalogSearch } from './models/catalog'
 import { respondPermission } from './permissions'
 import { applyStopShortcut } from './shortcuts'
@@ -167,12 +167,18 @@ export function registerIpc() {
     if (!res.ok) throw new Error(`Ollama show failed: ${res.status}`)
     return (await res.json()) as Record<string, unknown>
   })
-  ipcMain.handle('models:catalogSearch', (_e, query: string, source?: 'huggingface' | 'ollama') =>
+  ipcMain.handle('models:catalogSearch', (_e, query: string, source?: 'curated' | 'huggingface' | 'ollama') =>
     catalogSearch(query, source)
   )
   ipcMain.handle('models:hfFiles', (_e, repoId: string) => hfFiles(repoId))
   ipcMain.handle('models:pullOllama', (_e, name: string) => pullOllamaModel(name))
   ipcMain.handle('models:downloadGguf', (_e, repoId: string, file: string) => downloadGguf(repoId, file))
+  ipcMain.handle('models:llamaRuntime', () => llamaRuntimeStatus())
+  ipcMain.handle('models:installLlamaRuntime', async () => {
+    const task = await downloadLlamaRuntime()
+    providers.invalidate()
+    return task
+  })
   ipcMain.handle('models:downloads', () => listDownloads())
   ipcMain.handle('models:cancelDownload', (_e, id: string) => cancelDownload(id))
   ipcMain.handle('models:importGguf', async () => {

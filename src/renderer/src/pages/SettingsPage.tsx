@@ -440,7 +440,7 @@ export function SettingsPage({
                         })()}>Browse…</button>
                       </div>
                     </Field>
-                    <Field label="llama-server.exe path" hint="Required to launch imported GGUF files. Use a CUDA or Vulkan build for GPU offload; AMD on Windows should use Vulkan.">
+                    <Field label="llama-server.exe path" hint="Leave empty to use the local engine installed from the Model library. A custom Vulkan or CUDA build can be selected here; AMD on Windows should use Vulkan.">
                       <div className="row">
                         <input className="input" value={settings.models.llamaServerPath} readOnly placeholder="No llama-server.exe selected" />
                         <button className="btn btn-sm" type="button" onClick={() => void (async () => {
@@ -450,7 +450,7 @@ export function SettingsPage({
                       </div>
                     </Field>
                     <div className="setting-row">
-                      <div className="info"><div className="t">Auto-start llama.cpp</div><div className="d">Start llama-server when launching a GGUF model.</div></div>
+                      <div className="info"><div className="t">Auto-start llama.cpp</div><div className="d">Allow the managed engine to start automatically when a GGUF model is loaded.</div></div>
                       <Toggle checked={settings.models.autoStartLlama} onChange={(v) => void update({ models: { autoStartLlama: v } })} />
                     </div>
                     <div className="setting-row">

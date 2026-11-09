@@ -3,6 +3,7 @@ import type {
   AppSettings,
   DownloadTask,
   HardwareInfo,
+  LlamaRuntimeStatus,
   LocalModelFile,
   ModelCatalogItem,
   ModelInfo,
@@ -41,8 +42,8 @@ export function ModelsPage({
   const [downloads, setDownloads] = useState<DownloadTask[]>([])
   const [localModels, setLocalModels] = useState<LocalModelFile[]>([])
   const [catalog, setCatalog] = useState<ModelCatalogItem[]>([])
-  const [catalogQuery, setCatalogQuery] = useState('qwen')
-  const [catalogSource, setCatalogSource] = useState<'huggingface' | 'ollama'>('ollama')
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalogSource, setCatalogSource] = useState<'curated' | 'huggingface' | 'ollama'>('curated')
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -57,6 +58,7 @@ export function ModelsPage({
   const [endpointUrl, setEndpointUrl] = useState('http://127.0.0.1:8080/v1')
   const [endpointType, setEndpointType] = useState<'ollama' | 'openai'>('openai')
   const [llamaProvider, setLlamaProvider] = useState<ProviderStatus | null>(null)
+  const [runtime, setRuntime] = useState<LlamaRuntimeStatus | null>(null)
   const [hardwareBusy, setHardwareBusy] = useState(false)
   const [dependencies, setDependencies] = useState<Awaited<ReturnType<typeof api.models.dependencies>>>([])
 
@@ -76,16 +78,25 @@ export function ModelsPage({
     }
   }, [])
 
+  const refreshRuntime = useCallback(async () => {
+    try {
+      setRuntime(await api.models.llamaRuntime())
+    } catch {
+      // status is best-effort
+    }
+  }, [])
+
   useEffect(() => {
     void refreshDownloads()
     void refreshLocal()
+    void refreshRuntime()
     void api.models.dependencies().then(setDependencies).catch(() => undefined)
     void api.models.providers().then((list) => setLlamaProvider(list.find((p) => p.id === 'llamacpp') ?? null)).catch(() => undefined)
     const timer = setInterval(() => {
       void refreshDownloads()
     }, 2000)
     return () => clearInterval(timer)
-  }, [refreshDownloads, refreshLocal])
+  }, [refreshDownloads, refreshLocal, refreshRuntime])
 
   const searchCatalog = async () => {
     setCatalogBusy(true)
@@ -103,9 +114,9 @@ export function ModelsPage({
     void (async () => {
       setCatalogBusy(true)
       try {
-        setCatalog(await api.models.catalogSearch('qwen', 'ollama'))
+        setCatalog(await api.models.catalogSearch('', 'curated'))
       } catch {
-        // Ollama may be offline; catalog error stays in the search panel
+        // The curated list is local and should always load.
       } finally {
         setCatalogBusy(false)
       }
@@ -164,9 +175,51 @@ export function ModelsPage({
       await api.models.downloadGguf(hfItem.id, file)
       setHfItem(null)
       await refreshDownloads()
-      setNotice(`Download started: ${file}`)
+      setNotice(`Download started: ${file}. It will appear under Local GGUF files when it finishes.`)
     } catch (err) {
       setCatalogError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const installRuntime = async () => {
+    setBusy('runtime-install')
+    setError(null)
+    setNotice(null)
+    try {
+      await api.models.installLlamaRuntime()
+      await refreshDownloads()
+      setNotice('Downloading the local engine. Progress appears under Downloads.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const startLocalEngine = async (file: LocalModelFile) => {
+    setBusy(file.id)
+    setError(null)
+    setNotice(null)
+    try {
+      const status = await api.models.launchLlama(file.filePath, {
+        contextLength: hardware?.recommendations.contextLength,
+        gpuLayers: hardware?.recommendations.gpuLayers
+      })
+      if (!status.running) throw new Error(status.error ?? 'The local engine did not start.')
+      const discovered = await api.models.discover(true)
+      const loaded = discovered.find((model) => model.providerId === 'llamacpp')
+      await onRefresh()
+      await refreshRuntime()
+      if (loaded) {
+        onSelectModel(loaded.providerId, loaded.id)
+        setNotice(`${file.name} is loaded and selected. No Ollama process is needed.`)
+      } else {
+        setNotice(`${file.name} is loaded. The engine is running locally.`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -187,7 +240,24 @@ export function ModelsPage({
   }
 
   const activeDownloads = downloads.filter((d) => d.status === 'running' || d.status === 'queued')
+  const runtimeTask = downloads.find((task) => task.kind === 'runtime')
+  const runtimeTaskKey = runtimeTask ? `${runtimeTask.id}:${runtimeTask.status}` : ''
+  const completedGguf = downloads.find((task) => task.kind === 'gguf' && task.status === 'done')
+  const completedGgufKey = completedGguf?.id ?? ''
   const chatModels = useMemo(() => models.filter((m) => m.kind === 'chat'), [models])
+
+  useEffect(() => {
+    if (!runtimeTaskKey.endsWith(':done') && !runtimeTaskKey.endsWith(':error') && !runtimeTaskKey.endsWith(':cancelled')) return
+    void refreshRuntime()
+    void api.models.dependencies().then(setDependencies).catch(() => undefined)
+    if (runtimeTaskKey.endsWith(':done')) void onRefresh()
+  }, [runtimeTaskKey, refreshRuntime, onRefresh])
+
+  useEffect(() => {
+    if (!completedGgufKey) return
+    void refreshLocal()
+    setNotice(`Download finished: ${completedGguf?.name ?? 'model'}. Use Load & use under Local GGUF files.`)
+  }, [completedGgufKey, completedGguf?.name, refreshLocal])
 
   return (
     <div className="page">
@@ -197,8 +267,8 @@ export function ModelsPage({
             <div className="page-eyebrow">Local inference</div>
             <h1 className="page-title">Model library</h1>
             <p className="page-subtitle">
-              Use models already on this PC, import GGUF files, or download new ones. LocalPilot never re-downloads an
-              installed model and never silently switches to a cloud provider.
+              Download a model and run it with LocalPilot’s own engine. Ollama and LM Studio are optional; LocalPilot
+              never silently switches to a cloud provider.
             </p>
           </div>
           <div className="page-actions">
@@ -321,6 +391,76 @@ export function ModelsPage({
           </div>
         </Section>
 
+        <Section title="Local engine" hint="Managed llama.cpp · no Ollama required">
+          <div className="card">
+            <div className="row between wrap" style={{ alignItems: 'flex-start', gap: 14 }}>
+              <div className="row" style={{ alignItems: 'flex-start', gap: 12 }}>
+                <div className="icon-wrap"><Icon name="cpu" size={16} /></div>
+                <div>
+                  <div className="card-title" style={{ margin: 0 }}>
+                    Run GGUF models inside LocalPilot
+                    <span className={`badge ${runtime?.installed ? 'ok' : runtime?.running ? 'ok' : 'warn'}`}>
+                      {runtime?.running ? 'running' : runtime?.installed ? 'installed' : 'not installed'}
+                    </span>
+                  </div>
+                  <div className="card-sub" style={{ maxWidth: 620 }}>
+                    LocalPilot downloads and starts its own llama.cpp engine. You do not need to install Ollama or keep
+                    another app open on this PC.
+                  </div>
+                  {runtime?.path ? (
+                    <div className="tiny faint mono" style={{ marginTop: 6, wordBreak: 'break-all' }}>
+                      {runtime.variant ? `${runtime.variant} build · ` : ''}{runtime.path}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <div className="row wrap">
+                {runtime?.installed ? (
+                  <button
+                    className="btn btn-success"
+                    type="button"
+                    disabled={!localModels.length || runtime.running || busy === localModels[0]?.id}
+                    onClick={() => localModels[0] ? void startLocalEngine(localModels[0]) : undefined}
+                    title={!localModels.length ? 'Download a model from the catalog first' : undefined}
+                  >
+                    {busy === localModels[0]?.id ? <Spinner /> : <Icon name={runtime.running ? 'check' : 'play'} size={12} />}
+                    {runtime.running ? 'Engine running' : 'Start local engine'}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-success"
+                    type="button"
+                    disabled={busy === 'runtime-install' || runtimeTask?.status === 'running' || runtimeTask?.status === 'queued'}
+                    onClick={() => void installRuntime()}
+                  >
+                    {busy === 'runtime-install' || runtimeTask?.status === 'running' || runtimeTask?.status === 'queued' ? <Spinner /> : <Icon name="download" size={12} />}
+                    Install local engine
+                  </button>
+                )}
+              </div>
+            </div>
+            {runtimeTask && (runtimeTask.status === 'running' || runtimeTask.status === 'queued') ? (
+              <div style={{ marginTop: 12 }}>
+                <div className="row between tiny faint">
+                  <span>{runtimeTask.name}</span>
+                  <span>{formatBytes(runtimeTask.receivedBytes ?? 0)} / {formatBytes(runtimeTask.totalBytes ?? 0)}</span>
+                </div>
+                <div className="progress mt-8"><span style={{ width: `${Math.max(2, Math.min(100, runtimeTask.progress))}%` }} /></div>
+              </div>
+            ) : null}
+            {runtimeTask?.status === 'error' && runtimeTask.error ? (
+              <div className="notice-row error" style={{ marginTop: 10 }}>
+                <Icon name="alert" size={12} /> {runtimeTask.error}
+              </div>
+            ) : null}
+            {!localModels.length ? (
+              <div className="tiny faint" style={{ marginTop: 10 }}>
+                After installing the engine, download a model below. Green Download buttons open the available quantizations.
+              </div>
+            ) : null}
+          </div>
+        </Section>
+
         <Section title="Installed models" count={chatModels.length}
           hint={settings.models.defaultModelId ? `default: ${settings.models.defaultModelId}` : 'No default model yet'}>
           {models.length ? (
@@ -391,7 +531,8 @@ export function ModelsPage({
             </div>
           ) : (
             <EmptyState icon="cpu" title="No local models discovered">
-              Start Ollama or LM Studio, import a GGUF file, or use the catalog below. No cloud key is required.
+              Install the local engine and download a model from the catalog below; Ollama is optional. No cloud key is
+              required.
             </EmptyState>
           )}
         </Section>
@@ -407,7 +548,7 @@ export function ModelsPage({
                       <span className={`badge ${task.status === 'done' ? 'ok' : task.status === 'error' ? 'danger' : task.status === 'running' ? 'accent' : ''}`}>{task.status}</span>
                     </div>
                     <div className="data-sub">
-                      <span>{task.kind === 'ollama' ? 'Ollama pull' : 'GGUF download'}</span>
+                      <span>{task.kind === 'runtime' ? 'Local engine install' : task.kind === 'ollama' ? 'Ollama pull' : 'GGUF download'}</span>
                       <span>{formatBytes(task.receivedBytes)} / {formatBytes(task.totalBytes)}</span>
                       {task.speedBps ? <span>{formatBytes(task.speedBps)}/s</span> : null}
                       {task.error ? <span className="text-danger">{task.error}</span> : null}
@@ -428,6 +569,7 @@ export function ModelsPage({
         </Section>
 
         <Section title="Local GGUF files" count={localModels.length}
+          hint="Downloaded and imported models · runs with the local engine"
           actions={<button className="btn btn-sm" type="button" onClick={() => void runAction('import2', () => api.models.importGguf())}><Icon name="upload" size={11} /> Import</button>}>
           {localModels.length ? (
             <>
@@ -442,23 +584,8 @@ export function ModelsPage({
                       </div>
                     </div>
                     <div className="data-actions">
-                      <button className="btn btn-sm" type="button" disabled={busy === file.id} onClick={() => void (async () => {
-                        setBusy(file.id)
-                        setError(null)
-                        try {
-                          await api.models.launchLlama(file.filePath, {
-                            contextLength: hardware?.recommendations.contextLength,
-                            gpuLayers: hardware?.recommendations.gpuLayers
-                          })
-                          await onRefresh()
-                          setNotice(`llama.cpp started with ${file.name}.`)
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : String(err))
-                        } finally {
-                          setBusy(null)
-                        }
-                      })()}>
-                        {busy === file.id ? <Spinner /> : <Icon name="play" size={10} />} Launch
+                      <button className="btn btn-sm btn-success" type="button" disabled={busy === file.id || !runtime?.installed} onClick={() => void startLocalEngine(file)}>
+                        {busy === file.id ? <Spinner /> : <Icon name="play" size={10} />} Load & use
                       </button>
                       <button className="icon-btn" type="button" title="Show file" onClick={() => void api.app.showItemInFolder(file.filePath)}>
                         <Icon name="folder" size={13} />
@@ -480,10 +607,9 @@ export function ModelsPage({
                 </span>
               </div>
             </>
-          ) : (
-            <div className="card tight tiny faint">
-              Import an existing .gguf file to launch it with llama.cpp. For AMD GPUs configure a Vulkan-capable
-              llama-server build in Settings → Models.
+          ) : (            <div className="card tight tiny faint">
+              Download a model from the catalog, or import an existing .gguf file. Start the local engine above first;
+              LocalPilot handles the Vulkan or CPU build for you.
             </div>
           )}
         </Section>
@@ -526,15 +652,16 @@ export function ModelsPage({
           </div>
         </Section>
 
-        <Section title="Browse the model catalog" hint="Ollama library and Hugging Face GGUF repositories">
+        <Section title="Browse the model catalog" hint="Recommended GGUF models · green Download · Ollama optional">
           <div className="row" style={{ marginBottom: 12 }}>
             <div className="search-box grow" style={{ margin: 0 }}>
               <Icon name="search" size={13} />
               <input value={catalogQuery} onChange={(e) => setCatalogQuery(e.target.value)} placeholder="Search qwen, llama, deepseek, roblox…" onKeyDown={(e) => { if (e.key === 'Enter') void searchCatalog() }} />
             </div>
-            <select className="select select-sm" style={{ width: 150 }} value={catalogSource} onChange={(e) => setCatalogSource(e.target.value as 'huggingface' | 'ollama')}>
-              <option value="ollama">Ollama library</option>
+            <select className="select select-sm" style={{ width: 190 }} value={catalogSource} onChange={(e) => setCatalogSource(e.target.value as 'curated' | 'huggingface' | 'ollama')}>
+              <option value="curated">Recommended GGUF</option>
               <option value="huggingface">Hugging Face GGUF</option>
+              <option value="ollama">Ollama library</option>
             </select>
             <button className="btn btn-sm" type="button" onClick={() => void searchCatalog()} disabled={catalogBusy}>
               {catalogBusy ? <Spinner /> : <Icon name="search" size={12} />} Search
@@ -549,9 +676,9 @@ export function ModelsPage({
                   <div className="row between" style={{ alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <div className="card-title" style={{ wordBreak: 'break-word' }}>{item.name}</div>
-                      <div className="tiny faint">{item.developer} · {item.source}</div>
+                      <div className="tiny faint">{item.developer} · {item.pullName ? 'Ollama' : item.source === 'huggingface' ? 'Hugging Face' : 'Local-ready GGUF'}</div>
                     </div>
-                    <span className="badge">{item.source === 'ollama' ? 'pull' : 'GGUF'}</span>
+                    <span className="badge">{item.pullName ? 'Ollama' : 'GGUF'}</span>
                   </div>
                   <p className="card-sub" style={{ marginTop: 7, lineHeight: 1.5 }}>{item.description || 'No catalog description provided.'}</p>
                   <div className="model-capabilities">
@@ -561,8 +688,8 @@ export function ModelsPage({
                     {item.downloads ? <span className="cap">{formatNumber(item.downloads)} downloads</span> : null}
                   </div>
                   <div className="row mt-8" style={{ marginTop: 10 }}>
-                    <button className="btn btn-sm btn-primary" type="button" onClick={() => item.source === 'ollama' ? void pull(item) : void openHf(item)}>
-                      <Icon name="download" size={11} /> {item.source === 'ollama' ? 'Pull with Ollama' : 'Choose GGUF'}
+                    <button className="btn btn-sm btn-success" type="button" onClick={() => item.pullName ? void pull(item) : void openHf(item)}>
+                      <Icon name="download" size={11} /> Download
                     </button>
                     <button
                       className="icon-btn"
@@ -570,8 +697,8 @@ export function ModelsPage({
                       title="Open source page"
                       onClick={() =>
                         void api.app.openExternal(
-                          item.source === 'ollama'
-                            ? `https://ollama.com/library/${encodeURIComponent(item.name.split(':')[0])}`
+                          item.pullName
+                            ? `https://ollama.com/library/${encodeURIComponent(item.pullName.split(':')[0])}`
                             : `https://huggingface.co/${item.id}`
                         )
                       }
@@ -598,9 +725,15 @@ export function ModelsPage({
                 <div className="tiny faint mt-8" style={{ lineHeight: 1.5 }}>{dep.note}</div>
                 {dep.path ? <div className="tiny faint mono" style={{ marginTop: 4, wordBreak: 'break-all' }}>{dep.path}</div> : null}
                 {!dep.installed ? (
-                  <button className="btn btn-sm mt-8" type="button" onClick={() => void api.app.openExternal(dep.installUrl)}>
-                    <Icon name="external" size={11} /> Setup guide
-                  </button>
+                  dep.id === 'llamacpp' ? (
+                    <button className="btn btn-sm btn-success mt-8" type="button" onClick={() => void installRuntime()} disabled={busy === 'runtime-install'}>
+                      {busy === 'runtime-install' ? <Spinner /> : <Icon name="download" size={11} />} Install in app
+                    </button>
+                  ) : (
+                    <button className="btn btn-sm mt-8" type="button" onClick={() => void api.app.openExternal(dep.installUrl)}>
+                      <Icon name="external" size={11} /> Setup guide
+                    </button>
+                  )
                 ) : null}
               </div>
             ))}
@@ -694,12 +827,12 @@ export function ModelsPage({
                     <div className="title mono" style={{ wordBreak: 'break-all', fontSize: 11 }}>{file.name}</div>
                     <div className="sub">{formatBytes(file.sizeBytes)} · GGUF</div>
                   </div>
-                  <button className="btn btn-sm btn-primary" type="button" onClick={() => void downloadHf(file.name)}>
+                  <button className="btn btn-sm btn-success" type="button" onClick={() => void downloadHf(file.name)}>
                     <Icon name="download" size={11} /> Download
                   </button>
                 </div>
               )) : !hfBusy ? <div className="tiny faint">No GGUF files were found in this repository.</div> : null}
-              <div className="plugin-note">Downloads are saved to the configured models folder. Imported GGUF files can be launched with llama.cpp; adjust GPU layers for Vulkan or CUDA builds.</div>
+              <div className="plugin-note">Downloads are saved to the configured models folder. Install the local engine above, then use Load &amp; use on the downloaded file. No Ollama installation is required.</div>
             </div>
             <div className="modal-foot">
               <button className="btn btn-ghost" type="button" onClick={() => setHfItem(null)}>Close</button>

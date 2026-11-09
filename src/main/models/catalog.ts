@@ -63,6 +63,109 @@ export async function searchHuggingFace(query: string): Promise<ModelCatalogItem
   return items
 }
 
+interface CuratedGguf {
+  repo: string
+  name: string
+  developer: string
+  description: string
+  tags: string[]
+  capabilities: { tools: boolean; vision: boolean; thinking: boolean }
+}
+
+/** Ready-to-download GGUF repositories that run in LocalPilot's managed llama.cpp engine. */
+const CURATED_GGUF: CuratedGguf[] = [
+  {
+    repo: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF',
+    name: 'Qwen2.5 0.5B Instruct',
+    developer: 'Alibaba Qwen',
+    description: 'Tiny, fast starter model for testing local inference on modest hardware.',
+    tags: ['small', 'fast', 'qwen'],
+    capabilities: { tools: true, vision: false, thinking: false }
+  },
+  {
+    repo: 'Qwen/Qwen2.5-3B-Instruct-GGUF',
+    name: 'Qwen2.5 3B Instruct',
+    developer: 'Alibaba Qwen',
+    description: 'Balanced 3B assistant with strong writing, coding and tool use for 8GB machines.',
+    tags: ['recommended', 'tools', '3b'],
+    capabilities: { tools: true, vision: false, thinking: false }
+  },
+  {
+    repo: 'Qwen/Qwen2.5-Coder-7B-Instruct-GGUF',
+    name: 'Qwen2.5 Coder 7B',
+    developer: 'Alibaba Qwen',
+    description: 'Code generation and editing specialist that fits on a 12GB GPU at Q4.',
+    tags: ['coding', 'tools', '7b'],
+    capabilities: { tools: true, vision: false, thinking: false }
+  },
+  {
+    repo: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
+    name: 'Llama 3.2 3B Instruct',
+    developer: 'Meta',
+    description: 'Compact general assistant with reliable instruction following and tool support.',
+    tags: ['recommended', 'tools', '3b'],
+    capabilities: { tools: true, vision: false, thinking: false }
+  },
+  {
+    repo: 'bartowski/Meta-Llama-3.1-8B-Instruct-GGUF',
+    name: 'Llama 3.1 8B Instruct',
+    developer: 'Meta',
+    description: 'Well-established 8B local assistant with broad tool and reasoning coverage.',
+    tags: ['tools', '8b'],
+    capabilities: { tools: true, vision: false, thinking: false }
+  },
+  {
+    repo: 'bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF',
+    name: 'DeepSeek R1 Distill 7B',
+    developer: 'DeepSeek',
+    description: 'Reasoning-focused 7B distill for step-by-step math and logic.',
+    tags: ['reasoning', '7b'],
+    capabilities: { tools: false, vision: false, thinking: true }
+  },
+  {
+    repo: 'bartowski/gemma-2-9b-it-GGUF',
+    name: 'Gemma 2 9B Instruct',
+    developer: 'Google',
+    description: 'Strong general-purpose assistant with a compact 9B footprint.',
+    tags: ['general', '9b'],
+    capabilities: { tools: false, vision: false, thinking: false }
+  },
+  {
+    repo: 'bartowski/Mistral-Nemo-Instruct-2407-GGUF',
+    name: 'Mistral Nemo 12B Instruct',
+    developer: 'Mistral AI',
+    description: 'Larger all-round model with multilingual support and tool calling.',
+    tags: ['tools', '12b'],
+    capabilities: { tools: true, vision: false, thinking: false }
+  }
+]
+
+function curatedGguf(query: string): ModelCatalogItem[] {
+  const q = query.trim().toLowerCase()
+  return CURATED_GGUF.filter(
+    (model) =>
+      !q ||
+      model.name.toLowerCase().includes(q) ||
+      model.repo.toLowerCase().includes(q) ||
+      model.developer.toLowerCase().includes(q) ||
+      model.tags.some((tag) => tag.includes(q))
+  ).map((model) => ({
+    id: model.repo,
+    name: model.name,
+    developer: model.developer,
+    description: model.description,
+    tags: model.tags,
+    source: 'curated' as const,
+    capabilities: {
+      ...model.capabilities,
+      completion: true,
+      embeddings: false
+    },
+    capabilitySource: 'inferred' as const,
+    files: []
+  }))
+}
+
 interface CuratedOllama {
   pullName: string
   developer: string
@@ -203,13 +306,14 @@ export async function searchOllama(query: string): Promise<ModelCatalogItem[]> {
 
 export async function catalogSearch(
   query: string,
-  source: 'huggingface' | 'ollama' = 'huggingface'
+  source: 'curated' | 'huggingface' | 'ollama' = 'curated'
 ): Promise<ModelCatalogItem[]> {
+  if (source === 'curated') return curatedGguf(query)
   try {
     if (source === 'ollama') return await searchOllama(query)
     return await searchHuggingFace(query)
   } catch {
-    if (source === 'huggingface') return curatedOllama(query)
+    if (source === 'huggingface') return curatedGguf(query)
     return []
   }
 }
