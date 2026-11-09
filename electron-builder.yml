@@ -1,0 +1,49 @@
+appId: ai.localpilot.desktop
+productName: LocalPilot AI
+copyright: Copyright © 2026 LocalPilot AI
+
+publish:
+  provider: github
+  owner: toer15
+  repo: localpilot-ai
+  releaseType: release
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+
+asar: true
+asarUnpack:
+  - "node_modules/sql.js/dist/sql-wasm.wasm"
+  - "out/main/pluginHost.js"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: LocalPilot AI
+  uninstallDisplayName: LocalPilot AI
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: LocalPilot-Portable-${version}.${ext}

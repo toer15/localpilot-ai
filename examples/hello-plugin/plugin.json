@@ -1,0 +1,28 @@
+{
+  "id": "localpilot-hello-plugin",
+  "name": "LocalPilot Hello Plugin",
+  "version": "1.0.0",
+  "description": "Example native LocalPilot plugin that adds a project-aware greeting tool.",
+  "author": "LocalPilot AI",
+  "category": "Example",
+  "icon": "sparkles",
+  "os": ["win32"],
+  "permissions": ["project.read"],
+  "tools": [
+    {
+      "name": "hello",
+      "description": "Return a greeting and the active project folder (if any).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Person or project to greet."
+          }
+        },
+        "required": ["name"]
+      },
+      "risk": "low"
+    }
+  ]
+}
