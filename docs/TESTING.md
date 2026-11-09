@@ -35,6 +35,10 @@ npm run update:check
 
 The preserved 0.1.0 packaged build was then launched after `v0.1.1` was published. `updates.check()` returned `available` for 0.1.1 with GitHub release notes; the in-app modal displayed “A new LocalPilot version is available”, version 0.1.1, download progress and **What’s new**. The download reached `downloaded` at 100%; the modal changed to **Update ready to install** with **Restart and install**. Clicking **Later** closed the modal and kept the downloaded state. Screenshots: `artifacts/update-popup-available.png` and `artifacts/update-popup-downloaded.png`.
 
+After `v0.1.2` was published, a temporary isolated harness (`artifacts/update-check-012.mjs`) launched the packaged 0.1.2 build with a temporary `--user-data-dir`, opened Settings → About and clicked **Check for updates**. The status changed to `up-to-date` with `currentVersion: "0.1.2"` and no modal appeared. Screenshot: `artifacts/update-settings-0.1.2.png`.
+
+A copy of the preserved packaged 0.1.1 app was launched with the same isolation. `updates.check()` returned `available` for **0.1.2**, with the published release notes and message “LocalPilot AI 0.1.2 is available. Downloading the update…”. The updater began downloading; the harness closed at the `available` state, so completion and installation were not tested. Screenshot: `artifacts/update-0.1.1-to-0.1.2.png`.
+
 The final NSIS restart/install was intentionally not run, so the installer handoff and post-update launch remain unverified.
 
 ### Self-test — PASS (12/12)
@@ -164,6 +168,13 @@ The 0.1.2 build used the same electron-builder NSIS and portable targets as `npm
 
 An isolated packaged launch used a temporary `--user-data-dir` to avoid the running app’s single-instance lock. It reported `isPackaged: true`, version 0.1.2, 57 tools, an 86,016-byte database, the managed llama.cpp API, and a mounted renderer with no page errors; the AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-0.1.2-home.png`.
 
+GitHub Actions run [42655334520](https://github.com/toer15/localpilot-ai/actions/runs/42655334520) then built from tag `v0.1.2` and published:
+
+- `LocalPilot-AI-Setup-0.1.2-x64.exe` — 137,172,307 bytes.
+- `LocalPilot-AI-Setup-0.1.2-x64.exe.blockmap` — 143,313 bytes.
+- `LocalPilot-Portable-0.1.2.exe` — 119,910,368 bytes.
+- `latest.yml` — version 0.1.2 pointing at the normalized installer.
+
 The NSIS installer was not installed/uninstalled on a clean machine, and the portable executable was not launched directly.
 
 ## Artifacts
@@ -184,6 +195,8 @@ The NSIS installer was not installed/uninstalled on a clean machine, and the por
 | `artifacts/models-local-engine-running.png` | Managed engine running with the downloaded GGUF selected |
 | `artifacts/packaged-home.png` | Packaged 0.1.1 app launched |
 | `artifacts/packaged-0.1.2-home.png` | Isolated packaged 0.1.2 app launched |
+| `artifacts/update-settings-0.1.2.png` | Packaged 0.1.2 Settings → About live up-to-date check |
+| `artifacts/update-0.1.1-to-0.1.2.png` | Preserved 0.1.1 app detecting published 0.1.2 |
 | `artifacts/update-settings.png` | Settings → About live up-to-date check |
 | `artifacts/update-popup-available.png` | 0.1.0 update modal for 0.1.1 with progress and release notes |
 | `artifacts/update-popup-downloaded.png` | 0.1.1 downloaded, ready to install |
@@ -206,7 +219,7 @@ Artifacts contain real test conversations and desktop content; review before sha
 
 - Clean-machine NSIS install, upgrade, uninstall and data retention.
 - Portable executable direct launch.
-- Completing a version-to-version install after download; the 0.1.0 → 0.1.1 test stopped at the downloaded prompt without running the installer.
+- Completing a version-to-version install after download; the 0.1.0 → 0.1.1 test stopped at the downloaded prompt without running the installer, and the 0.1.1 → 0.1.2 test stopped at `available`.
 - Windows 10, Chrome, actual multi-monitor hardware and OS-level per-monitor DPI scaling (forced app scaling was used).
 - LM Studio, external llama.cpp builds, Vulkan GPU offload and cloud provider runtime behavior. The managed engine was tested with CPU offload only.
 - Capability-warning branches (the test model reports tools, vision and thinking).
