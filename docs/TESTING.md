@@ -29,9 +29,13 @@ npm run update:check
 
 `npm run typecheck` passed for `tsconfig.node.json` and `tsconfig.web.json`. `npm run build` produced main, preload and renderer bundles in `out/`. Two expected Vite warnings note ineffective dynamic imports; they are informational.
 
-### Software updates — PASS (live up-to-date check)
+### Software updates — PASS (live check, modal and download)
 
-`npm run update:check` launched the packaged build, opened Settings → About and clicked **Check for updates**. The status changed from `idle` to `up-to-date` with `currentVersion: "0.1.0"` and no update modal appeared for the current version. The public GitHub release `v0.1.0` had the NSIS installer, blockmap, portable build and `latest.yml`. A version-to-version prompt/download is exercised against `v0.1.1` below.
+`npm run update:check` launched the packaged 0.1.1 app, opened Settings → About and clicked **Check for updates**. The status changed from `idle` to `up-to-date` with `currentVersion: "0.1.1"`, and no update modal appeared for the current version. The earlier packaged 0.1.0 build reported the same result against `v0.1.0`.
+
+The preserved 0.1.0 packaged build was then launched after `v0.1.1` was published. `updates.check()` returned `available` for 0.1.1 with GitHub release notes; the in-app modal displayed “A new LocalPilot version is available”, version 0.1.1, download progress and **What’s new**. The download reached `downloaded` at 100%; the modal changed to **Update ready to install** with **Restart and install**. Clicking **Later** closed the modal and kept the downloaded state. Screenshots: `artifacts/update-popup-available.png` and `artifacts/update-popup-downloaded.png`.
+
+The final NSIS restart/install was intentionally not run, so the installer handoff and post-update launch remain unverified.
 
 ### Self-test — PASS (12/12)
 
@@ -161,6 +165,9 @@ The NSIS installer was not installed/uninstalled on a clean machine, and the por
 | `artifacts/ai-test-overlay-scale-1_25.png` | Overlay at forced 125% scale |
 | `artifacts/ai-test-overlay-scale-1_5.png` | Overlay at forced 150% scale |
 | `artifacts/packaged-home.png` | Packaged app launched |
+| `artifacts/update-settings.png` | Settings → About live up-to-date check |
+| `artifacts/update-popup-available.png` | 0.1.0 update modal for 0.1.1 with progress and release notes |
+| `artifacts/update-popup-downloaded.png` | 0.1.1 downloaded, ready to install |
 | `artifacts/acceptance-failure.png` | Earlier failure retained from development |
 
 Artifacts contain real test conversations and desktop content; review before sharing. `notepad-interaction.png` is a full desktop capture.

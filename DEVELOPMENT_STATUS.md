@@ -25,9 +25,9 @@ This document separates **implemented**, **verified**, and **not yet verified**.
 | --- | --- | --- |
 | TypeScript and production bundles | `npm run typecheck`, `npm run build` and `npm run dist` after the independent AI cursor and updater changes | **Pass** |
 | Update metadata and packaged updater | `npm run dist`: `latest.yml` and `app-update.yml` generated; 38 `electron-updater` files in `app.asar`; `npm run smoke:packaged`: packaged app 0.1.0, `isPackaged: true`, 57 tools | **Pass** |
-| Published GitHub release | `v0.1.0` workflow passed; release assets repaired with the four assets: installer, blockmap, portable, `latest.yml` | **Pass** |
-| Live GitHub update check | Packaged 0.1.0 app: Settings → About → **Check for updates** reached GitHub, returned “Up to date (0.1.0)”, and showed no modal while current | **Pass** |
-| Update prompt/download from a newer release | Packaged 0.1.0 app runs against published 0.1.1; launch/check, modal, progress and downloaded state | **Pending** |
+| Published GitHub releases | `v0.1.0` and `v0.1.1` workflows passed; the 0.1.1 release has the installer, blockmap, portable build and `latest.yml`; publishing is deterministic through `gh release` | **Pass** |
+| Live GitHub update check | Packaged 0.1.0 and 0.1.1 apps: Settings → About → **Check for updates** reached GitHub and returned up to date; no modal for the current version | **Pass** |
+| Update prompt/download from a newer release | Preserved 0.1.0 packaged app against published 0.1.1: modal named 0.1.1, showed release notes, download reached `downloaded`/100%, and **Later** preserved the downloaded state | **Pass; final install/restart not run** |
 | Final regression re-run | `npx electron out/main/index.js --self-test`: 12/12 checks; `SMOKE_PERSIST=1 npm run smoke`: local `UI_READY`, 57 tools with the optional pack uninstalled, settings and conversations persisted across restart | **Pass** |
 | Built-in self-test | `npx electron out/main/index.js --self-test`: 12 checks, 0 failed (SQLite, hardware, providers, models, real local inference, tool registry, project files + traversal guard, PowerShell, 2560×1440 screenshot, Playwright Edge, MCP SDK, local-only prerequisites) | **Pass** |
 | Real local Ollama chat in the UI | UI smoke: streamed `UI_READY`; persisted conversation with `providerId: ollama`, `modelId: qwen3.6:27b` | **Pass** |
@@ -46,7 +46,7 @@ This document separates **implemented**, **verified**, and **not yet verified**.
 | Persistence across restart | `SMOKE_PERSIST=1`: dark theme, onboarding complete, default provider/model and 3 conversations survived a real app restart | **Pass** |
 | Local-only enforcement | `npm run acceptance:localonly`: remote endpoint blocked during discovery, startup and chat; web/browser tools absent; agent run ended with a local-only error and no active run | **Pass** |
 | Installer and portable build | `npm run dist` exit 0; NSIS 137,169,268 bytes, portable 119,906,224 bytes; `latest.yml` 0.1.1 and `app-update.yml` present | **Built** |
-| Packaged app starts | `npm run smoke:packaged`: packaged app 0.1.0, `isPackaged: true`, 57 tools, 9,035,776-byte database, renderer mounted; AI test overlay started and stopped (1 overlay window) | **Pass** |
+| Packaged app starts | `npm run smoke:packaged`: packaged app 0.1.1, `isPackaged: true`, 57 tools, 9,035,776-byte database, renderer mounted; AI test overlay started and stopped (1 overlay window) | **Pass** |
 | NSIS install/uninstall on a clean machine | Not run | **Not verified** |
 | Portable executable launch | Not run (the unpacked packaged app was launched) | **Not verified** |
 
@@ -54,7 +54,7 @@ Test artifacts: `artifacts/ui-home.png`, `ui-chat.png`, `ui-tools.png`, `ui-brow
 
 ## Known limitations
 
-- **Unsigned builds.** No code-signing certificate is configured. SmartScreen may warn. Updates use public GitHub Releases; portable builds do not self-update. A real version-to-version update install has not yet been exercised.
+- **Unsigned builds.** No code-signing certificate is configured. SmartScreen may warn. Updates use public GitHub Releases; portable builds do not self-update. The 0.1.0 → 0.1.1 modal and download were exercised, but the final NSIS restart/install was not run.
 - **Installer not exercised.** NSIS packaging succeeded, but no clean-machine install/uninstall, non-admin install, upgrade or uninstall-data-retention test was performed.
 - **One model/runtime exercised.** Ollama with `qwen3.6:27b` on Windows 11. LM Studio, llama.cpp server, AMD Vulkan llama.cpp offload and cloud/OpenAI-compatible providers were not runtime-tested despite being implemented.
 - **Native plugins are not sandboxed.** They run in a forked Electron child process with IPC but with the user's OS privileges. Manifest permissions are shown to the user but are not enforced by the OS.
@@ -75,4 +75,4 @@ Test artifacts: `artifacts/ui-home.png`, `ui-chat.png`, `ui-tools.png`, `ui-brow
 5. Exercise capability-warning paths with a non-vision model and with attachments.
 6. Test Chrome and screen-reader/keyboard-only use.
 7. Add an OS-level sandbox or explicit review gate for native plugins; document MCP network isolation.
-8. Add code signing and exercise a real version-to-version update: publish a newer release, let an older installed build download it, inspect the popup, and complete the restart/install flow.
+8. Add code signing and complete the final update install/restart on a test machine. The 0.1.0 → 0.1.1 check, modal, release notes and download are verified.
