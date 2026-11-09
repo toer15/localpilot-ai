@@ -51,7 +51,11 @@ The self-test proved the plugin is enabled, both tools are registered, and a che
 
 ### Automatic silent updates — IMPLEMENTED, NOT EXERCISED
 
-When `update-downloaded` fires, the updater waits six seconds, then calls `quitAndInstall(true, true)` through the same `shutdown()` path as a normal quit. If `agentRunner.active()` is non-empty the install is deferred ten seconds at a time, and `autoInstallOnAppQuit` is on. This path was not exercised: it needs a published newer release plus an older packaged build, and the running 0.1.3 installation was deliberately left alone.
+When `update-downloaded` fires, the updater waits six seconds, then calls `quitAndInstall(true, true)` through the same `shutdown()` path as a normal quit. If `agentRunner.active()` is non-empty the install is deferred ten seconds at a time, and `autoInstallOnAppQuit` is on. This path was not exercised: it needs an older packaged build, and the running 0.1.3 installation was deliberately left alone.
+
+### Release publication — PASS
+
+GitHub Actions run [42664461368](https://github.com/toer15/localpilot-ai/actions/runs/42664461368) first failed in **Package Windows builds** with `Response code 500 (Internal Server Error)` while electron-builder fetched its packaging payload — an upstream/network failure, not a code failure. `gh run rerun 42664461368 --failed` completed successfully. The public release `v0.1.4` (draft=false, prerelease=false) contains `latest.yml` (363 bytes), `LocalPilot-AI-Setup-0.1.4-x64.exe` (137,178,472 bytes), its blockmap (143,274 bytes) and `LocalPilot-Portable-0.1.4.exe` (119,917,359 bytes). The live `latest.yml` reports version 0.1.4.
 
 ## Results (9 November 2026 — 0.1.3)
 
