@@ -32,13 +32,15 @@ The context setting is a ceiling, not a guarantee. The agent fits system prompt,
 - **Maximum tool calls**, run timeout (default 180 s), default reasoning effort and tool protocol.
 - **Tool protocol** — `auto` uses native function calling only when the model reports tool support from the provider; otherwise the text protocol. `native` forces native calls; `text` forces the text protocol.
 - **Subagents** — allowed by default and inherit project scope and approvals.
-- **Profiles** — General, Coding, Deep reasoning, Computer control and Game development. Profiles set temperature, context, reasoning, iterations, allowed tool groups and a system-prompt suffix.
+- **Profiles** — General, Coding, Deep reasoning, Computer control and Game development. Profiles set temperature, context, reasoning, iterations, allowed tool groups and a system-prompt suffix. **Full PC access** (default on) overrides profile tool-group limits; turn it off if you want a profile's tool groups to be restrictive.
+- **Queued follow-ups** — while a run is active, the composer stays available. Sending adds the message to a queue above the composer instead of interrupting the run. It starts automatically when the current task ends. Use the small × on a queued row to remove it. The queue is per conversation; **Stop** interrupts the current run and the next queued message starts afterward.
 
 ## Computer Use
 
 Computer Use is enabled by default but sensitive actions require approval.
 
-- Disable it to revoke all screenshot, mouse, keyboard, window and UIA tools.
+- **Full PC access** is on by default. It exposes every enabled tool group and lets file tools read, write, search, move and delete using absolute paths anywhere on this PC, whether or not a project is open. Profile tool-group limits are bypassed. High-risk actions still prompt, and delete refuses drive roots, Windows, Program Files, ProgramData and the user-profile root. Turn it off to restore project-scoped file tools and profile-restricted tool groups.
+- Disable Computer Use to revoke all screenshot, mouse, keyboard, window and UIA tools.
 - Screenshots, mouse/keyboard and window control can be disabled independently.
 - **Approval policy**: `ask` prompts for sensitive actions; `session` allows approving a tool session; `auto-safe` automatically approves low-risk reads only. **High-risk actions always prompt**, even with a session approval.
 - **Application allowlist** (default `notepad.exe`, `explorer.exe`, `mspaint.exe`) lowers friction for known apps; it is not a security boundary.

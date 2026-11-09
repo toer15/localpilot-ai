@@ -1,5 +1,7 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { settings } from '../settings'
 import type { ToolContext } from './types'
 
 export const IGNORED_DIRS = new Set([
@@ -26,30 +28,61 @@ export const IGNORED_DIRS = new Set([
   'obj'
 ])
 
+export function fullAccessEnabled(): boolean {
+  return settings.get().computer.fullAccess === true
+}
+
 export function projectRoot(ctx: ToolContext): string {
-  if (!ctx.projectPath) {
-    throw new Error(
-      'No project folder is open. Ask the user to create or open a project in the Projects page first; LocalPilot does not write files outside an approved project.'
-    )
-  }
-  return path.resolve(ctx.projectPath)
+  if (ctx.projectPath) return path.resolve(ctx.projectPath)
+  if (fullAccessEnabled()) return os.homedir()
+  throw new Error(
+    'No project folder is open. Open a project, or enable Full PC access in Settings → Computer Use to work with files anywhere on this PC.'
+  )
 }
 
 export function resolveProjectPath(input: unknown, ctx: ToolContext): string {
-  const root = projectRoot(ctx)
+  const fullAccess = fullAccessEnabled()
+  const root = ctx.projectPath
+    ? path.resolve(ctx.projectPath)
+    : fullAccess
+      ? os.homedir()
+      : projectRoot(ctx)
   const rel = typeof input === 'string' && input.trim() ? input.trim() : '.'
-  const target = path.resolve(root, rel)
-  const relative = path.relative(root, target)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error(
-      `Path "${rel}" is outside the active project folder (${root}). LocalPilot restricts file access to the open project.`
-    )
+  const target = path.isAbsolute(rel) ? path.resolve(rel) : path.resolve(root, rel)
+  if (!fullAccess && ctx.projectPath) {
+    const relative = path.relative(root, target)
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error(
+        `Path "${rel}" is outside the active project folder (${root}). Enable Full PC access in Settings → Computer Use, or use a path inside the project.`
+      )
+    }
   }
   return target
 }
 
 export function relativeToProject(target: string, ctx: ToolContext): string {
-  return path.relative(projectRoot(ctx), target).replace(/\\/g, '/') || '.'
+  const root = projectRoot(ctx)
+  const relative = path.relative(root, target)
+  if (!relative) return '.'
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return path.resolve(target).replace(/\\/g, '/')
+  }
+  return relative.replace(/\\/g, '/')
+}
+
+/** Refuse the handful of delete targets that would break the OS or the user profile. */
+export function isProtectedDeleteTarget(target: string): boolean {
+  const resolved = path.resolve(target).toLowerCase()
+  if (resolved === path.parse(resolved).root.toLowerCase()) return true
+  const protectedPaths = [
+    process.env.WINDIR,
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.ProgramData,
+    os.homedir(),
+    path.join(path.parse(os.homedir()).root, 'Users')
+  ].filter(Boolean) as string[]
+  return protectedPaths.some((candidate) => path.resolve(candidate).toLowerCase() === resolved)
 }
 
 export function isProbablyBinary(buffer: Buffer): boolean {

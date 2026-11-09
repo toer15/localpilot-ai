@@ -136,6 +136,7 @@ export interface AppSettings {
   }
   computer: {
     enabled: boolean
+    fullAccess: boolean
     screenshots: boolean
     mouseKeyboard: boolean
     windowControl: boolean

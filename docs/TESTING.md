@@ -23,11 +23,23 @@ npm run update:check
 
 `npm run acceptance` builds first. The individual scripts assume `out/` is current unless invoked via their npm script.
 
-## Results (9 November 2026)
+## Results (9 November 2026 — 0.1.3)
 
 ### Typecheck and build — PASS
 
-`npm run typecheck` passed for `tsconfig.node.json` and `tsconfig.web.json`. `npm run build` produced main, preload and renderer bundles in `out/`. Two expected Vite warnings note ineffective dynamic imports; they are informational.
+`npm run typecheck` passed for `tsconfig.node.json` and `tsconfig.web.json`. `npm run build` produced main, preload and renderer bundles in `out/`. Expected Vite warnings note ineffective dynamic imports; they are informational. The checks were rerun after the Full PC access and queued-message changes, then again for version 0.1.3 before packaging.
+
+### Full PC access and queued follow-ups — PASS (0.1.3, isolated real app)
+
+An isolated profile launched the built Electron app with its own `--user-data-dir`. The test selected the **Coding** profile, whose saved tool groups deliberately exclude `computer`, `windows` and `uia`, then turned **Full PC access** on. This verifies the app-level override rather than relying on the General profile.
+
+- The agent called `files.write` with an absolute path in `%TEMP%` while no project was open and created the file with exactly `FULL_PC_OK`.
+- The same run called `screen.screenshot` and the local model replied `FULLPC_TOOLS_OK`. Tool cards: `files.write, screen.screenshot`.
+- Both actions required and received real permission approvals; no approval was bypassed.
+- For the queue, the app started a 650-word response, then a second composer message was sent while the run was active. The queue strip showed “1 message queued — sent after the current task”.
+- After the first run ended, the queued message started without another click. SQLite contained both user messages and both assistant replies; the final assistant reply was exactly `QUEUED_MESSAGE_SENT`, and the queue strip disappeared.
+
+Screenshots: `artifacts/fullpc-tools-013.png`, `queue-mode-013.png`, `queue-mode-complete-013.png`. The temporary profile and absolute-path probe file were removed after the run.
 
 ### Software updates — PASS (live check, modal and download)
 
@@ -43,17 +55,17 @@ The final NSIS restart/install was intentionally not run, so the installer hando
 
 ### Self-test — PASS (12/12)
 
-`npx electron out/main/index.js --self-test` exited 0:
+`npx electron out/main/index.js --self-test --user-data-dir=…` exited 0:
 
 | Check | Detail |
 | --- | --- |
-| SQLite | 6,430,720-byte database, 5 conversations, 3 providers |
+| SQLite | Isolated 9,035,776-byte database, 1 conversation, 3 providers |
 | Hardware | Ryzen 7 9800X3D, 31.2 GB RAM, RX 9070 XT 15.9 GB, Vulkan guidance |
 | Local providers | Ollama running v0.40.15 with 1 model; LM Studio and llama.cpp offline |
 | Models | `qwen3.6:27b` (tools, vision) |
 | Local inference | Real Ollama round-trip returned `READY` (2 output tokens) |
-| Tool registry | 57 tools across 12 groups |
-| Project files | Wrote/read a project file; traversal guard blocked escape |
+| Tool registry | 203 tools across 18 groups with the current optional MCP packs |
+| File path access guard | Wrote/read a project file; traversal blocked with Full PC access off; absolute path outside the project allowed with it on |
 | PowerShell | Marker returned in 163 ms |
 | Screenshot | 2560×1440 PNG captured |
 | Playwright | Headless Edge read the test page title |
@@ -177,6 +189,18 @@ GitHub Actions run [42655334520](https://github.com/toer15/localpilot-ai/actions
 
 The NSIS installer was not installed/uninstalled on a clean machine, and the portable executable was not launched directly.
 
+### 0.1.3 installer and packaged launch — BUILT / smoke PASS
+
+The 0.1.3 targets were written to `artifacts/release-0.1.3` while the installed 0.1.1 app was running:
+
+- `LocalPilot AI-Setup-0.1.3-x64.exe` — 137,173,770 bytes.
+- `LocalPilot AI-Setup-0.1.3-x64.exe.blockmap` — 143,419 bytes.
+- `LocalPilot-Portable-0.1.3.exe` — 119,911,932 bytes.
+- `latest.yml` — version 0.1.3, pointing at the normalized installer.
+- `win-unpacked/` — packaged app with `resources/app-update.yml`.
+
+An isolated packaged launch used a temporary `--user-data-dir` and reported `isPackaged: true`, version 0.1.3, 57 tools, Full PC access on by default, an 86,016-byte database, and a mounted renderer with no page errors. The real AI test overlay started and stopped (1 overlay window). Screenshot: `artifacts/packaged-0.1.3-home.png`. Clean-machine NSIS install/uninstall and portable direct launch were not run.
+
 ## Artifacts
 
 | File | Content |
@@ -195,6 +219,10 @@ The NSIS installer was not installed/uninstalled on a clean machine, and the por
 | `artifacts/models-local-engine-running.png` | Managed engine running with the downloaded GGUF selected |
 | `artifacts/packaged-home.png` | Packaged 0.1.1 app launched |
 | `artifacts/packaged-0.1.2-home.png` | Isolated packaged 0.1.2 app launched |
+| `artifacts/fullpc-tools-013.png` | 0.1.3 absolute-path write and screenshot under the Coding profile with Full PC access on |
+| `artifacts/queue-mode-013.png` | Queued follow-up visible while the first task is running |
+| `artifacts/queue-mode-complete-013.png` | Completed queued follow-up with both replies |
+| `artifacts/packaged-0.1.3-home.png` | Isolated packaged 0.1.3 app launched |
 | `artifacts/update-settings-0.1.2.png` | Packaged 0.1.2 Settings → About live up-to-date check |
 | `artifacts/update-0.1.1-to-0.1.2.png` | Preserved 0.1.1 app detecting published 0.1.2 |
 | `artifacts/update-settings.png` | Settings → About live up-to-date check |
@@ -209,7 +237,8 @@ Artifacts contain real test conversations and desktop content; review before sha
 - Conversations, messages and activity remain in `%APPDATA%\LocalPilot AI\data\localpilot.db`.
 - Screenshots accumulate in `%APPDATA%\LocalPilot AI\captures`.
 - The isolated managed-engine test profile under `artifacts/runtime-test-profile` was removed after verification; the two model-library screenshots remain in `artifacts/`.
-- The self-test writes `data/selftest-report.json` and a probe file under `%APPDATA%\LocalPilot AI\selftest`.
+- The 0.1.3 full-PC/queue test profile was removed, and its absolute-path probe file in `%TEMP%` was deleted after verification. Screenshots remain in `artifacts/`.
+- The self-test writes `data/selftest-report.json` and a probe file under `%APPDATA%\LocalPilot AI\selftest`. The isolated 0.1.3 self-test wrote its probe under its temporary profile instead.
 - The Notepad test closes only the Notepad process it detected as new.
 - The local-only test cleans up its endpoint and conversation.
 - The overlay and DPI tests move the real pointer, exercise the guarded test-only AI mouse action, restore the pointer, and uninstall the tester pack after verifying revocation.

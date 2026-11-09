@@ -152,7 +152,7 @@ export async function runSelfTest(options: Options = {}): Promise<SelfTestReport
     return { detail: `${tools.length} enabled tools across ${new Set(tools.map((t) => t.group)).size} groups.` }
   })
 
-  await check(checks, 'Project-scoped file tools', async () => {
+  await check(checks, 'File path access guard', async () => {
     const projectDir = path.join(paths.userData, 'selftest', 'project')
     fs.mkdirSync(projectDir, { recursive: true })
     const ctx = {
@@ -169,19 +169,35 @@ export async function runSelfTest(options: Options = {}): Promise<SelfTestReport
     const writeTool = filesTools.find((t) => t.name === 'files.write')!
     const readTool = filesTools.find((t) => t.name === 'files.read')!
     const marker = `SELFTEST_${Date.now()}`
-    const write = await writeTool.handler({ path: 'notes/probe.txt', content: `LocalPilot self-test ${marker}\n` }, ctx)
-    if (!write.ok) throw new Error(write.content)
-    const read = await readTool.handler({ path: 'notes/probe.txt' }, ctx)
-    if (!read.content.includes(marker)) throw new Error('Written file could not be read back with the expected contents.')
-    let escaped = false
+    const originalFullAccess = settings.get().computer.fullAccess
     try {
-      resolveProjectPath('../../outside.txt', ctx)
-      escaped = true
-    } catch {
-      escaped = false
+      const write = await writeTool.handler({ path: 'notes/probe.txt', content: `LocalPilot self-test ${marker}\n` }, ctx)
+      if (!write.ok) throw new Error(write.content)
+      const read = await readTool.handler({ path: 'notes/probe.txt' }, ctx)
+      if (!read.content.includes(marker)) throw new Error('Written file could not be read back with the expected contents.')
+
+      settings.update({ computer: { fullAccess: false } })
+      let escaped = false
+      try {
+        resolveProjectPath('../../outside.txt', ctx)
+        escaped = true
+      } catch {
+        escaped = false
+      }
+      if (escaped) throw new Error('Project path guard failed to block a traversal attempt with Full PC access off.')
+
+      settings.update({ computer: { fullAccess: true } })
+      const absoluteProbe = path.join(paths.userData, 'selftest', 'absolute-probe.txt')
+      const resolved = resolveProjectPath(absoluteProbe, ctx)
+      if (resolved !== path.resolve(absoluteProbe)) {
+        throw new Error('Full PC access did not allow an absolute path outside the active project.')
+      }
+      return {
+        detail: `Wrote and read ${path.join(projectDir, 'notes', 'probe.txt')}; traversal guard blocked with Full PC access off and absolute paths allowed with it on.`
+      }
+    } finally {
+      settings.update({ computer: { fullAccess: originalFullAccess } })
     }
-    if (escaped) throw new Error('Project path guard failed to block a traversal attempt.')
-    return { detail: `Wrote and read ${path.join(projectDir, 'notes', 'probe.txt')}; traversal guard active.` }
   })
 
   await check(checks, 'PowerShell execution', async () => {

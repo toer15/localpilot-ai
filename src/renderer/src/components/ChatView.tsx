@@ -18,6 +18,12 @@ import { safeJson, truncate } from '../lib/format'
 
 const api = window.localpilot
 
+interface QueuedMessage {
+  id: string
+  text: string
+  attachments: Attachment[]
+}
+
 interface Props {
   settings: AppSettings
   conversation: ConversationDetail | null
@@ -273,12 +279,14 @@ export function ChatView(props: Props) {
 
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [queued, setQueued] = useState<QueuedMessage[]>([])
   const [composerError, setComposerError] = useState<string | null>(null)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const dispatchingRef = useRef(false)
 
   const messages = conversation?.messages ?? []
   const hasContent = messages.length > 0 || !!live
@@ -308,18 +316,51 @@ export function ChatView(props: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [previewImage])
 
+  // A conversation change starts a fresh queue; never send an old follow-up
+  // into a different chat.
+  useEffect(() => {
+    setQueued([])
+  }, [conversation?.id])
+
+  // Dispatch one queued message after the current run finishes. The next run
+  // must be running before this can fire again, so messages stay sequential.
+  useEffect(() => {
+    if (running || dispatchingRef.current || !queued.length || !selected) return
+    const next = queued[0]
+    dispatchingRef.current = true
+    setQueued((prev) => prev.slice(1))
+    setComposerError(null)
+    stick.current = true
+    void onSend(next.text, next.attachments)
+      .catch((err) => setComposerError(err instanceof Error ? err.message : String(err)))
+      .finally(() => {
+        dispatchingRef.current = false
+      })
+  }, [queued, running, selected, onSend])
+
   const submit = async (override?: string) => {
     const value = (override ?? text).trim()
-    if ((!value && !attachments.length) || running || !selected) return
+    if ((!value && !attachments.length) || !selected) return
+    if (queued.length >= 20) {
+      setComposerError('The queue is full (20 messages). Remove one or wait for the current task to finish.')
+      return
+    }
+    const outgoing = attachments
     setText('')
     setAttachments([])
     setComposerError(null)
     stick.current = true
-    await onSend(value, attachments)
+    if (running || queued.length) {
+      setQueued((prev) => [
+        ...prev,
+        { id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text: value, attachments: outgoing }
+      ])
+      return
+    }
+    await onSend(value, outgoing)
   }
 
   const handlePaste = async (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    if (running) return
     const imageItems = Array.from(event.clipboardData.items).filter(
       (item) => item.kind === 'file' && item.type.startsWith('image/')
     )
@@ -602,6 +643,34 @@ export function ChatView(props: Props) {
 
         <div className="composer-wrap">
           <div className="composer">
+            {queued.length ? (
+              <div className="queue-strip">
+                <div className="queue-strip-head">
+                  <Icon name="clock" size={12} />
+                  <span>
+                    {queued.length} message{queued.length === 1 ? '' : 's'} queued — sent after the current task
+                  </span>
+                </div>
+                {queued.map((item) => (
+                  <div className="queue-item" key={item.id}>
+                    <span className="queue-item-text">
+                      {item.text.trim() || `${item.attachments.length} attachment${item.attachments.length === 1 ? '' : 's'}`}
+                    </span>
+                    {item.attachments.length ? (
+                      <span className="badge">{item.attachments.length} file{item.attachments.length === 1 ? '' : 's'}</span>
+                    ) : null}
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="Remove queued message"
+                      onClick={() => setQueued((prev) => prev.filter((queuedItem) => queuedItem.id !== item.id))}
+                    >
+                      <Icon name="x" size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {attachments.length ? (
               <div className="attachments-row">
                 {attachments.map((attachment) => (
@@ -620,12 +689,11 @@ export function ChatView(props: Props) {
                 rows={1}
                 placeholder={
                   running
-                    ? 'The agent is working. Press Stop to interrupt…'
+                    ? 'Queue a follow-up — it sends when this task finishes…'
                     : selected
                       ? `Ask ${modelName} to do something on this PC…`
                       : 'Select a local model to begin…'
                 }
-                disabled={running}
                 onChange={(e) => setText(e.target.value)}
                 onPaste={(event) => void handlePaste(event)}
                 onKeyDown={(e) => {
@@ -636,7 +704,7 @@ export function ChatView(props: Props) {
                 }}
               />
               <div className="composer-actions">
-                <button className="icon-btn" type="button" title="Attach files" onClick={() => void attachFiles()} disabled={running}>
+                <button className="icon-btn" type="button" title="Attach files" onClick={() => void attachFiles()}>
                   <Icon name="paperclip" size={15} />
                 </button>
                 <button
@@ -644,7 +712,7 @@ export function ChatView(props: Props) {
                   type="button"
                   title="Attach a visible desktop screenshot"
                   onClick={() => void attachScreenshot()}
-                  disabled={running || capturing}
+                  disabled={capturing}
                 >
                   {capturing ? <span className="spinner" /> : <Icon name="image" size={15} />}
                 </button>
@@ -652,19 +720,40 @@ export function ChatView(props: Props) {
                   <button className="stop-btn" type="button" onClick={() => void onStop()}>
                     <Icon name="stop" size={11} /> Stop
                   </button>
-                ) : (
-                  <button className="send-btn" type="button" onClick={() => void submit()} disabled={(!text.trim() && !attachments.length) || !selected} title="Send">
-                    <Icon name="arrow-right" size={15} />
-                  </button>
-                )}
+                ) : null}
+                <button
+                  className="send-btn"
+                  type="button"
+                  onClick={() => void submit()}
+                  disabled={(!text.trim() && !attachments.length) || !selected}
+                  title={running ? 'Queue message to send after this task' : 'Send'}
+                >
+                  <Icon name={running ? 'clock' : 'arrow-right'} size={15} />
+                </button>
               </div>
             </div>
             <div className="composer-foot">
               <span className="hint">
-                <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline · <kbd>Ctrl</kbd>+<kbd>V</kbd> paste image
+                {running ? (
+                  'You can queue another message; it sends when this task finishes.'
+                ) : (
+                  <>
+                    <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline · <kbd>Ctrl</kbd>+<kbd>V</kbd> paste image
+                  </>
+                )}
               </span>
               <span className="grow" />
               {toolsUnsupported ? <span className="badge warn">native tools not reported</span> : null}
+              <span
+                className={`badge ${settings.computer.fullAccess ? 'ok' : ''}`}
+                title={
+                  settings.computer.fullAccess
+                    ? 'All enabled tools and absolute file paths are available; approvals still apply.'
+                    : 'File tools stay inside the active project and profile tool groups apply.'
+                }
+              >
+                {settings.computer.fullAccess ? 'full PC' : 'project scope'}
+              </span>
               <span className="badge" title="All inference is local">
                 <span className="dot" style={{ background: 'var(--ok)' }} /> local only
               </span>

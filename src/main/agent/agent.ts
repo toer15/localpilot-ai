@@ -140,7 +140,10 @@ export class AgentRunner {
       })
     }
 
-    const allowedGroups = profile.allowedGroups
+    // Full PC access is the app-level switch for the user's "do anything"
+    // mode. It exposes every enabled tool group; approval rules still gate
+    // the actions themselves.
+    const allowedGroups = s.computer.fullAccess ? null : profile.allowedGroups
     const tools = toolRegistry.list(allowedGroups)
     const toolSchemas: ProviderTool[] = tools.map((tool) => ({
       name: tool.name,

@@ -138,6 +138,9 @@ export function defaultSettings(modelsDir: string): AppSettings {
     },
     computer: {
       enabled: true,
+      // The agent is meant to operate this PC, not just chat. Profiles can
+      // still narrow tools when the user turns full access off.
+      fullAccess: true,
       screenshots: true,
       mouseKeyboard: true,
       windowControl: true,

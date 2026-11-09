@@ -6,6 +6,7 @@ import {
   applyUnifiedDiff,
   formatBytes,
   isProbablyBinary,
+  isProtectedDeleteTarget,
   relativeToProject,
   resolveProjectPath,
   summariseDiff,
@@ -28,11 +29,15 @@ function readText(target: string): string {
 export const filesTools: ToolDefinition[] = [
   {
     name: 'files.read',
-    description: 'Read a UTF-8 text file from the active project. Use line offsets for large files.',
+    description:
+      'Read a UTF-8 text file. Absolute paths are allowed with Full PC access; otherwise paths are relative to the active project. Use line offsets for large files.',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'File path relative to the project root.' },
+        path: {
+          type: 'string',
+          description: 'File path; absolute when Full PC access is on, otherwise relative to the active project.'
+        },
         offset: { type: 'number', description: '1-based first line to return. Optional.' },
         limit: { type: 'number', description: 'Maximum number of lines. Optional; default all (max 4000).' }
       },
@@ -62,11 +67,14 @@ export const filesTools: ToolDefinition[] = [
   {
     name: 'files.write',
     description:
-      'Create or overwrite a UTF-8 text file inside the active project. Creates missing parent folders. Read existing files before overwriting them.',
+      'Create or overwrite a UTF-8 text file. Absolute paths are allowed with Full PC access; otherwise paths are relative to the active project. Creates missing parent folders. Read existing files before overwriting them.',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'File path relative to the project root.' },
+        path: {
+          type: 'string',
+          description: 'File path; absolute when Full PC access is on, otherwise relative to the active project.'
+        },
         content: { type: 'string', description: 'Complete new file content.' }
       },
       required: ['path', 'content']
@@ -97,7 +105,7 @@ export const filesTools: ToolDefinition[] = [
   {
     name: 'files.edit',
     description:
-      'Edit a project file by replacing an exact block of text. Read the file first. Include enough surrounding context so the old text is unique.',
+      'Edit a text file by replacing an exact block of text. Absolute paths are allowed with Full PC access. Read the file first and include enough surrounding context so the old text is unique.',
     parameters: {
       type: 'object',
       properties: {
@@ -144,7 +152,7 @@ export const filesTools: ToolDefinition[] = [
   {
     name: 'files.apply_patch',
     description:
-      'Apply a standard unified diff (@@ hunks) to a project text file. Useful for multi-line edits produced by a diff tool.',
+      'Apply a standard unified diff (@@ hunks) to a text file. Absolute paths are allowed with Full PC access. Useful for multi-line edits produced by a diff tool.',
     parameters: {
       type: 'object',
       properties: {
@@ -169,7 +177,8 @@ export const filesTools: ToolDefinition[] = [
   },
   {
     name: 'files.list',
-    description: 'List files and folders in the active project as a compact tree. Hidden build folders are skipped.',
+    description:
+      'List files and folders as a compact tree. Absolute paths are allowed with Full PC access; otherwise paths are relative to the active project. Hidden build folders are skipped.',
     parameters: {
       type: 'object',
       properties: {
@@ -193,14 +202,15 @@ export const filesTools: ToolDefinition[] = [
       const root = relativeToProject(target, ctx)
       const lines = entries.map((entry) => `${entry.isDir ? '📁' : '  '} ${entry.path}${entry.isDir ? '/' : `  (${formatBytes(entry.size)})`}`)
       return ok(
-        `Project: ${root === '.' ? projectRootLabel(ctx) : root}\n${entries.length} entries\n\n${lines.join('\n')}`,
+        `Location: ${root === '.' ? projectRootLabel(ctx) : root}\n${entries.length} entries\n\n${lines.join('\n')}`,
         { count: entries.length }
       )
     }
   },
   {
     name: 'files.search',
-    description: 'Search file contents (or file names) within the active project. Skips node_modules and build output.',
+    description:
+      'Search file contents within a folder. Absolute paths are allowed with Full PC access. Skips node_modules and build output.',
     parameters: {
       type: 'object',
       properties: {
@@ -257,7 +267,7 @@ export const filesTools: ToolDefinition[] = [
   },
   {
     name: 'files.mkdir',
-    description: 'Create a folder inside the active project.',
+    description: 'Create a folder. Absolute paths are allowed with Full PC access; otherwise the path is relative to the active project.',
     parameters: {
       type: 'object',
       properties: { path: { type: 'string' } },
@@ -275,7 +285,8 @@ export const filesTools: ToolDefinition[] = [
   },
   {
     name: 'files.delete',
-    description: 'Delete a file or folder inside the active project. Requires approval and is irreversible.',
+    description:
+      'Delete a file or folder. Absolute paths are allowed with Full PC access. Requires approval and is irreversible; drive roots, Windows, Program Files, ProgramData and the user-profile root are refused.',
     parameters: {
       type: 'object',
       properties: {
@@ -291,10 +302,13 @@ export const filesTools: ToolDefinition[] = [
     preview: (args) => `Permanently delete ${str(args.path)}${args.recursive ? ' (and everything inside)' : ''}.`,
     handler: async (args, ctx) => {
       const target = resolveProjectPath(args.path, ctx)
-      if (target === fs.realpathSync(ctx.projectPath ?? target)) {
+      if (!fs.existsSync(target)) return fail('Path does not exist.')
+      if (ctx.projectPath && path.resolve(target).toLowerCase() === path.resolve(ctx.projectPath).toLowerCase()) {
         return fail('Refusing to delete the project root.')
       }
-      if (!fs.existsSync(target)) return fail('Path does not exist.')
+      if (isProtectedDeleteTarget(target)) {
+        return fail('Refusing to delete a protected system or user-profile root. Choose a specific file or subfolder.')
+      }
       fs.rmSync(target, { recursive: args.recursive === true, force: false })
       recordActivity('file-delete', `Deleted ${relativeToProject(target, ctx)}`)
       return ok(`Deleted ${relativeToProject(target, ctx)}.`)
@@ -302,7 +316,8 @@ export const filesTools: ToolDefinition[] = [
   },
   {
     name: 'files.move',
-    description: 'Move or rename a file/folder inside the active project.',
+    description:
+      'Move or rename a file or folder. Absolute paths are allowed with Full PC access; otherwise paths are relative to the active project.',
     parameters: {
       type: 'object',
       properties: {
@@ -329,5 +344,5 @@ export const filesTools: ToolDefinition[] = [
 ]
 
 function projectRootLabel(ctx: { projectName?: string; projectPath?: string | null }) {
-  return ctx.projectName || ctx.projectPath || 'project'
+  return ctx.projectName || ctx.projectPath || 'home folder'
 }

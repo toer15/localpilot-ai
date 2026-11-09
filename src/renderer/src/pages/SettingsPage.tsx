@@ -528,6 +528,10 @@ export function SettingsPage({
                       <Toggle checked={settings.computer.enabled} onChange={(v) => void update({ computer: { enabled: v } })} />
                     </div>
                     <div className="setting-row">
+                      <div className="info"><div className="t">Full PC access</div><div className="d">Expose every enabled tool group and let file tools use absolute paths anywhere on this PC. Profile tool limits are bypassed while this is on. High-risk actions still require approval.</div></div>
+                      <Toggle checked={settings.computer.fullAccess} onChange={(v) => void update({ computer: { fullAccess: v } })} />
+                    </div>
+                    <div className="setting-row">
                       <div className="info"><div className="t">Screenshots</div><div className="d">Allow visible screen capture. There is no hidden continuous capture.</div></div>
                       <Toggle checked={settings.computer.screenshots} onChange={(v) => void update({ computer: { screenshots: v } })} />
                     </div>

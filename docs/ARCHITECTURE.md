@@ -53,7 +53,7 @@ Main process (Node/Electron)
 
 ## Tools and permissions
 
-Tools declare `name`, JSON Schema `parameters`, `risk`, `group`, `source`, an optional `enabled()` predicate, an optional `sessionKey()` and a preview. The registry filters by profile group, pack enablement, local-only policy and dynamic conditions (for example Computer Use settings). Native/MCP tools are added by their managers and removed with the plugin.
+Tools declare `name`, JSON Schema `parameters`, `risk`, `group`, `source`, an optional `enabled()` predicate, an optional `sessionKey()` and a preview. The registry filters by profile group, pack enablement, local-only policy and dynamic conditions (for example Computer Use settings). With Full PC access on, built-in tool-group filtering is bypassed and file tools accept absolute paths outside the active project; the permission broker still gates the actions. Native/MCP tools are added by their managers and removed with the plugin.
 
 The permission broker keeps pending requests, session approvals and “always” approvals. High-risk tools always prompt. No window, timeout (10 minutes) or send failure resolves to deny. Every decision is recorded in Activity.
 

@@ -1,6 +1,6 @@
 # Installation
 
-LocalPilot AI 0.1.2 supports Windows 10 and Windows 11 x64.
+LocalPilot AI 0.1.3 supports Windows 10 and Windows 11 x64.
 
 ## Requirements
 
@@ -13,7 +13,7 @@ LocalPilot AI 0.1.2 supports Windows 10 and Windows 11 x64.
 
 ## Install with the NSIS installer
 
-1. Run `release/LocalPilot AI-Setup-0.1.2-x64.exe`.
+1. Run `release/LocalPilot AI-Setup-0.1.3-x64.exe`.
 2. The installer is per-user and does not require administrator rights. Choose an install directory if you do not want the default.
 3. Shortcuts are created for the desktop and Start Menu.
 4. Launch **LocalPilot AI**.
@@ -28,7 +28,7 @@ The updater replaces the installed app. The portable executable does not self-up
 
 ## Portable build
 
-Run `release/LocalPilot-Portable-0.1.2.exe`. It unpacks and starts without an installation. Application data still lives under `%APPDATA%\LocalPilot AI` (portable mode does not redirect user data next to the executable). Portable builds do not use the in-app updater; replace the executable with a newer release when you want to upgrade.
+Run `release/LocalPilot-Portable-0.1.3.exe`. It unpacks and starts without an installation. Application data still lives under `%APPDATA%\LocalPilot AI` (portable mode does not redirect user data next to the executable). Portable builds do not use the in-app updater; replace the executable with a newer release when you want to upgrade.
 
 ## First run
 
