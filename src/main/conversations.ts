@@ -140,6 +140,51 @@ export function updateMessageToolCalls(messageId: string, toolCalls: ToolCallRec
   run('UPDATE messages SET tool_calls = ? WHERE id = ?', [JSON.stringify(toolCalls), messageId])
 }
 
+/** Replace the text of a sent user message. Only user turns are editable. */
+export function replaceUserMessage(
+  conversationId: string,
+  messageId: string,
+  content: string,
+  attachments?: StoredMessage['attachments']
+): boolean {
+  const row = get<{ role: string; conversation_id: string }>(
+    'SELECT role, conversation_id FROM messages WHERE id = ?',
+    [messageId]
+  )
+  if (!row || row.role !== 'user' || row.conversation_id !== conversationId) return false
+  if (attachments === undefined) {
+    run('UPDATE messages SET content = ? WHERE id = ?', [content, messageId])
+  } else {
+    run('UPDATE messages SET content = ?, attachments = ? WHERE id = ?', [
+      content,
+      attachments.length ? JSON.stringify(attachments) : null,
+      messageId
+    ])
+  }
+  run('UPDATE conversations SET updated_at = ? WHERE id = ?', [new Date().toISOString(), conversationId])
+  return true
+}
+
+/**
+ * Rewind a conversation to `messageId`: every later message is deleted so an
+ * edited turn becomes the newest message again.
+ */
+export function truncateAfterMessage(conversationId: string, messageId: string): number {
+  const anchor = get<{ rowid: number }>(
+    'SELECT rowid FROM messages WHERE id = ? AND conversation_id = ?',
+    [messageId, conversationId]
+  )
+  if (!anchor) return 0
+  const result = run('DELETE FROM messages WHERE conversation_id = ? AND rowid > ?', [
+    conversationId,
+    Number(anchor.rowid)
+  ])
+  if (result.changes) {
+    run('UPDATE conversations SET updated_at = ? WHERE id = ?', [new Date().toISOString(), conversationId])
+  }
+  return result.changes
+}
+
 export function setConversationTitle(id: string, title: string) {
   const clean = title.trim().slice(0, 120) || 'Conversation'
   run('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?', [clean, new Date().toISOString(), id])

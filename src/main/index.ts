@@ -18,7 +18,8 @@ import { broadcast } from './broadcast'
 import { terminalEvents } from './tools/terminal'
 import { runSelfTest } from './selftest'
 import { aiOverlay } from './computer/overlay'
-import { initUpdater, setUpdateInstallHandler } from './updater'
+import { initUpdater, setUpdateBusyCheck, setUpdateInstallHandler } from './updater'
+import { agentRunner } from './agent/agent'
 
 const isSelfTest = process.argv.includes('--self-test')
 let mainWindow: BrowserWindow | null = null
@@ -90,6 +91,8 @@ async function bootstrap() {
 
   createWindow()
   setUpdateInstallHandler(shutdown)
+  // Never restart for an update in the middle of an agent task.
+  setUpdateBusyCheck(() => agentRunner.active().length > 0)
   initUpdater()
 }
 

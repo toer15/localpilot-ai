@@ -812,7 +812,7 @@ export function SettingsPage({
                 <div className="settings-section">
                   <div className="settings-section-head">
                     <h4>Software updates</h4>
-                    <p>Installed builds check GitHub Releases at launch and every four hours. Updates download in the background and never restart without your action.</p>
+                    <p>Installed builds check GitHub Releases at launch and every four hours. Updates download and install silently, then LocalPilot restarts on its own — waiting for an active task to finish first.</p>
                   </div>
                   <div className="settings-section-body">
                     <div className="row wrap">
@@ -821,7 +821,7 @@ export function SettingsPage({
                       </button>
                       {updateStatus?.phase === 'downloaded' ? (
                         <button className="btn btn-sm btn-primary" type="button" disabled={busy === 'update-install'} onClick={() => void installUpdate()}>
-                          {busy === 'update-install' ? <Spinner /> : <Icon name="download" size={11} />} Restart and install {updateStatus.version}
+                          {busy === 'update-install' ? <Spinner /> : <Icon name="download" size={11} />} Restart now ({updateStatus.version})
                         </button>
                       ) : null}
                       <span className="tiny faint">{updateSummary(updateStatus, info.version)}</span>

@@ -22,7 +22,7 @@ The build is unsigned, so Windows SmartScreen may show “Windows protected your
 
 ### Automatic updates
 
-Installed NSIS builds check the public [GitHub Releases feed](https://github.com/toer15/localpilot-ai/releases) shortly after startup and every four hours. When a newer version is available, LocalPilot downloads it in the background and shows an in-app prompt. The installer runs only after you choose **Restart and install**; closing the prompt leaves the app running. You can also use **Settings → About → Check for updates** at any time.
+Installed NSIS builds check the public [GitHub Releases feed](https://github.com/toer15/localpilot-ai/releases) shortly after startup and every four hours. When a newer version is available, LocalPilot downloads it in the background, installs it silently and restarts by itself — there is no installer wizard to click through. If an agent run is active, the restart waits until it finishes. **Restart now** installs immediately, and **Settings → About → Check for updates** performs a manual check at any time.
 
 The updater replaces the installed app. The portable executable does not self-update; download a newer portable build from the Releases page. The repository is public so installed copies can read release metadata without embedding a GitHub token in the app.
 

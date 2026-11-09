@@ -7,10 +7,20 @@ import { broadcast } from './broadcast'
 
 const INITIAL_CHECK_DELAY_MS = 12_000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+/**
+ * Installed builds update themselves: when a download finishes, LocalPilot
+ * installs it silently and restarts. The user never walks through the setup
+ * wizard. A run that is still working may finish first.
+ */
+const AUTO_INSTALL_DELAY_MS = 6_000
+const AUTO_INSTALL_RETRY_MS = 10_000
 
 let initialized = false
 let checking = false
 let beforeInstall: (() => Promise<void> | void) | null = null
+let autoInstallTimer: NodeJS.Timeout | null = null
+let autoInstalling = false
+let busyCheck: (() => boolean) | null = null
 let status: AppUpdateStatus = {
   phase: 'idle',
   currentVersion: appVersion()
@@ -72,8 +82,9 @@ function initEvents() {
       phase: 'downloaded',
       version: info.version,
       percent: 100,
-      message: `LocalPilot AI ${info.version} is ready to install.`
+      message: `LocalPilot AI ${info.version} is ready. Installing and restarting automatically…`
     })
+    scheduleAutoInstall()
   })
   autoUpdater.on('update-not-available', () => {
     publish({
@@ -100,7 +111,7 @@ export function initUpdater(): AppUpdateStatus {
     message: app.isPackaged ? undefined : 'Update checks are available in installed builds.'
   }
   autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = false
+  autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.autoRunAppAfterInstall = true
   autoUpdater.allowPrerelease = false
   autoUpdater.allowDowngrade = false
@@ -148,13 +159,57 @@ export function setUpdateInstallHandler(handler: () => Promise<void> | void) {
   beforeInstall = handler
 }
 
+/** Registered by the app so an update never interrupts a running agent task. */
+export function setUpdateBusyCheck(check: () => boolean) {
+  busyCheck = check
+}
+
+function scheduleAutoInstall(delay = AUTO_INSTALL_DELAY_MS) {
+  if (autoInstalling) return
+  if (autoInstallTimer) clearTimeout(autoInstallTimer)
+  autoInstallTimer = setTimeout(() => void runAutoInstall(), delay)
+  autoInstallTimer.unref()
+}
+
+async function runAutoInstall() {
+  autoInstallTimer = null
+  if (autoInstalling || status.phase !== 'downloaded') return
+  if (busyCheck?.()) {
+    publish({
+      message: `LocalPilot AI ${status.version ?? 'update'} is ready. Waiting for the current task to finish, then restarting and installing…`
+    })
+    scheduleAutoInstall(AUTO_INSTALL_RETRY_MS)
+    return
+  }
+  autoInstalling = true
+  log.info('updater', `Installing ${status.version ?? 'the update'} automatically and restarting`)
+  publish({
+    phase: 'downloaded',
+    percent: 100,
+    message: status.version
+      ? `Restarting to install LocalPilot AI ${status.version}…`
+      : 'Restarting to install the update…'
+  })
+  try {
+    await installUpdate()
+  } catch (error) {
+    autoInstalling = false
+    log.warn('updater', 'Automatic install failed', errorMessage(error))
+    publish({
+      phase: 'error',
+      message: `${errorMessage(error)} Use Settings → About → Install update to retry.`
+    })
+  }
+}
+
 export async function installUpdate(): Promise<AppUpdateStatus> {
   if (status.phase !== 'downloaded') {
     throw new Error('No downloaded update is ready to install.')
   }
   try {
     if (beforeInstall) await beforeInstall()
-    autoUpdater.quitAndInstall(false, true)
+    // Silent install: NSIS runs without its wizard, then the app relaunches.
+    autoUpdater.quitAndInstall(true, true)
   } catch (error) {
     const message = errorMessage(error)
     publish({ phase: 'error', message })

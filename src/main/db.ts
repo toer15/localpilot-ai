@@ -90,6 +90,11 @@ function migrate() {
     CREATE TABLE IF NOT EXISTS secrets (
       id TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS context_checkpoints (
+      id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL,
+      note TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_context_checkpoints_conversation ON context_checkpoints(conversation_id, created_at);
   `)
 }
 

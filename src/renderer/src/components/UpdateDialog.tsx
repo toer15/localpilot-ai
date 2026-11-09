@@ -31,12 +31,14 @@ export function UpdateDialog({ status, installing, onClose, onInstall }: Props) 
             <Icon name={ready ? 'check' : 'download'} size={17} />
           </div>
           <div className="grow">
-            <h3 id="update-dialog-title">{ready ? 'Update ready to install' : 'A new LocalPilot version is available'}</h3>
+            <h3 id="update-dialog-title">
+              {ready ? 'Update ready — restarting automatically' : 'A new LocalPilot version is available'}
+            </h3>
             <div className="sub">
               Version {version} is available for LocalPilot AI {status.currentVersion}.
             </div>
           </div>
-          <button className="icon-btn" type="button" onClick={onClose} aria-label="Close update prompt">
+          <button className="icon-btn" type="button" onClick={onClose} aria-label="Hide this update notice">
             <Icon name="x" size={15} />
           </button>
         </div>
@@ -46,8 +48,8 @@ export function UpdateDialog({ status, installing, onClose, onInstall }: Props) 
             <Icon name={ready ? 'check' : 'download'} size={15} style={{ marginTop: 1, flex: '0 0 auto' }} />
             <span>
               {ready
-                ? 'The installer has been downloaded and verified. Restart LocalPilot to finish installing it.'
-                : 'The update downloads in the background. You can keep working; LocalPilot will ask before restarting.'}
+                ? 'The installer was downloaded and verified. LocalPilot installs it silently and restarts on its own — there are no installer steps to click through.'
+                : 'The update downloads in the background. You can keep working; LocalPilot installs it and restarts automatically when the download finishes.'}
             </span>
           </div>
 
@@ -85,15 +87,19 @@ export function UpdateDialog({ status, installing, onClose, onInstall }: Props) 
 
         <div className="modal-foot">
           <div className="grow tiny faint">
-            {ready ? 'LocalPilot will close briefly while the update installs.' : 'Auto-checks run at launch and every four hours.'}
+            {ready
+              ? 'Restarting automatically after the current task finishes. No installer wizard will open.'
+              : 'Auto-checks run at launch and every four hours.'}
           </div>
-          <button className="btn" type="button" onClick={onClose} disabled={installing}>
-            {ready ? 'Later' : 'Not now'}
-          </button>
+          {ready ? null : (
+            <button className="btn" type="button" onClick={onClose}>
+              Not now
+            </button>
+          )}
           {ready ? (
             <button className="btn btn-primary" type="button" onClick={onInstall} disabled={installing}>
               {installing ? <Spinner /> : <Icon name="refresh" size={13} />}
-              Restart and install
+              Restart now
             </button>
           ) : null}
         </div>

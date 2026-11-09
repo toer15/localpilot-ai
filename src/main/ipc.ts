@@ -18,7 +18,7 @@ import { llamaServer } from './providers/llama'
 import { getSecret, hasSecret, setSecret } from './secrets'
 import { toolRegistry } from './tools'
 import { agentRunner } from './agent/agent'
-import { addMessage, autoTitle, createConversation, deleteConversation, getConversation, listConversations, setConversationModel, setConversationTitle } from './conversations'
+import { addMessage, autoTitle, createConversation, deleteConversation, getConversation, listConversations, replaceUserMessage, setConversationModel, setConversationTitle, truncateAfterMessage } from './conversations'
 import { createProject, getActiveProject, getProject, listProjects, projectFiles, removeProject, updateProject } from './projects'
 import { listMemories, removeMemory, saveMemory, updateMemory } from './memory'
 import { listActivity, clearActivity } from './activity'
@@ -301,13 +301,22 @@ export function registerIpc() {
       }
     }
 
-    addMessage(request.conversationId, {
-      role: 'user',
-      content: finalText,
-      attachments: request.attachments,
-      providerId: request.providerId,
-      modelId: request.modelId
-    })
+    const replaceId = typeof request.replaceMessageId === 'string' ? request.replaceMessageId : null
+    if (replaceId) {
+      // Editing a sent message rewinds the conversation: the edited turn becomes
+      // the newest message and every later turn is discarded.
+      const replaced = replaceUserMessage(request.conversationId, replaceId, finalText, request.attachments)
+      if (!replaced) throw new Error('That message can no longer be edited. Reopen the conversation and try again.')
+      truncateAfterMessage(request.conversationId, replaceId)
+    } else {
+      addMessage(request.conversationId, {
+        role: 'user',
+        content: finalText,
+        attachments: request.attachments,
+        providerId: request.providerId,
+        modelId: request.modelId
+      })
+    }
     setConversationModel(request.conversationId, request.providerId, request.modelId)
     autoTitle(request.conversationId, text)
     settings.update({

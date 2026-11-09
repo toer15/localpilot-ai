@@ -55,7 +55,7 @@ The packaged app contains `resources/app-update.yml`, generated from the `publis
 
 6. Add or edit user-facing notes on the GitHub release if desired. The app shows the release body as **What’s new** when GitHub supplies it.
 
-Installed copies of the previous version check shortly after launch and every four hours, download the NSIS package in the background, and prompt. Installation is explicit; **Settings → About → Check for updates** is the manual path.
+Installed copies of the previous version check shortly after launch and every four hours, download the NSIS package in the background, then install it silently and relaunch on their own — unless an agent run is active, in which case the install waits for it to finish. **Restart now** installs immediately, and **Settings → About → Check for updates** is the manual path. No step of the update requires the NSIS wizard.
 
 ## Manual publish
 

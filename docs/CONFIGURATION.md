@@ -69,7 +69,7 @@ Global memory entries are stored in SQLite and injected into agent context acros
 
 ## Software updates
 
-Installed NSIS builds use `electron-updater` with the public GitHub Releases feed at `https://github.com/toer15/localpilot-ai/releases`. Checks run shortly after startup and every four hours; downloads happen in the background; installation requires **Restart and install**. **Settings → About → Check for updates** performs a manual check and shows the current version, download progress and any release notes. The portable executable and development runs do not use the updater.
+Installed NSIS builds use `electron-updater` with the public GitHub Releases feed at `https://github.com/toer15/localpilot-ai/releases`. Checks run shortly after startup and every four hours. Downloads happen in the background; when one finishes, LocalPilot installs it silently and restarts on its own, with no installer wizard. If an agent run is still active, the install waits for it to finish first. **Settings → About → Check for updates** performs a manual check and shows the current version, download progress and any release notes; **Restart now** installs immediately. The portable executable and development runs do not use the updater.
 
 The update check requests release metadata from GitHub. It does not send conversations, prompts, project files, API keys or settings. The repository is public by design so the app does not need a bundled GitHub token.
 

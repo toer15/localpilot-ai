@@ -10,6 +10,7 @@ import { memoryTools } from './memory'
 import { systemTools } from './system'
 import { agentTools } from './agents'
 import { testerTools } from './tester'
+import { infiniteTools } from './infinite'
 import type { ToolDefinition } from './types'
 
 let registered = false
@@ -28,7 +29,8 @@ export function registerBuiltinTools() {
     ...memoryTools,
     ...systemTools,
     ...agentTools,
-    ...testerTools
+    ...testerTools,
+    ...infiniteTools
   ]
   toolRegistry.register(tools)
 }

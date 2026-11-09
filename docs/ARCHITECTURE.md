@@ -24,7 +24,7 @@ Main process (Node/Electron)
 ## Main modules
 
 - `index.ts` — lifecycle, single-instance lock, window creation, graceful shutdown (DB flush, plugins, browser, llama.cpp, child processes).
-- `updater.ts` — `electron-updater` with the public GitHub Releases provider: startup and four-hour checks, background download, status broadcasts, release notes, explicit install, and shutdown coordination for `quitAndInstall`.
+- `updater.ts` — `electron-updater` with the public GitHub Releases provider: startup and four-hour checks, background download, status broadcasts, release notes, silent automatic install/restart deferred while a run is active, and shutdown coordination for `quitAndInstall`.
 - `ipc.ts` — all channels: app, updates, settings, models, chat, tools/permissions, projects, plugins, memory, activity, computer, terminal, browser.
 - `db.ts` — sql.js database loaded from `data/localpilot.db`, schema migration, debounced atomic save (`.tmp` + rename).
 - `settings.ts` — deep-merged settings store with default migration (legacy 8k context → 32k).

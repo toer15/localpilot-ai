@@ -10,6 +10,8 @@ export interface PromptContext {
   tools: ToolSchema[]
   profile: AgentProfile
   nativeTools: boolean
+  /** Infinite Context plugin is enabled. */
+  infinite?: boolean
 }
 
 export function buildSystemPrompt(ctx: PromptContext): string {
@@ -82,6 +84,14 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 
   const memory = memoryPromptBlock(project?.id ?? null)
   if (memory) lines.push('', '## Local memory', memory)
+
+  if (ctx.infinite) {
+    lines.push(
+      '',
+      '## Infinite context',
+      'Infinite Context is active. The conversation is compacted automatically as the window fills: older turns become a summary, and your saved checkpoints are re-attached to every request. Call infinite.checkpoint whenever you start or change a plan, before a long tool sequence, and after an important discovery. Write the goal, the steps already done, the current step and what remains. There is no practical agent step ceiling in this mode — keep going until the task is genuinely finished and verified.'
+    )
+  }
 
   if (settings.agent.allowSubagents) {
     lines.push(

@@ -506,6 +506,49 @@ export default function App() {
     [active, addToast, refreshConversations, running, selected, settings]
   )
 
+  const editMessage = useCallback(
+    async (messageId: string, text: string) => {
+      if (!settings || !selected || !active) {
+        addToast('Select a local model before editing a message.', 'warn')
+        return
+      }
+      setRunning(true)
+      await api.chat.stop().catch(() => undefined)
+      const pendingLive: LiveState = {
+        runId: 'pending',
+        conversationId: active.id,
+        text: '',
+        reasoning: '',
+        phase: 'thinking',
+        status: 'Rewinding the conversation and resending…',
+        notices: []
+      }
+      liveRef.current = pendingLive
+      setLive(pendingLive)
+      try {
+        await api.chat.send({
+          conversationId: active.id,
+          text,
+          providerId: selected.providerId,
+          modelId: selected.modelId,
+          projectId: settings.activeProjectId,
+          profileId: settings.agent.activeProfileId,
+          reasoningEffort: settings.agent.reasoningEffort,
+          replaceMessageId: messageId
+        })
+        await refreshActiveConversation()
+        await refreshConversations()
+      } catch (err) {
+        setRunning(false)
+        liveRef.current = null
+        setLive(null)
+        addToast(`Could not edit the message: ${err instanceof Error ? err.message : String(err)}`, 'error')
+        throw err
+      }
+    },
+    [active, addToast, refreshActiveConversation, refreshConversations, selected, settings]
+  )
+
   const stopRun = useCallback(async () => {
     await api.chat.stop(liveRef.current?.runId === 'pending' ? undefined : liveRef.current?.runId)
     setRunning(false)
@@ -586,6 +629,7 @@ export default function App() {
             activeModel={activeModel}
             onSelectModel={selectModel}
             onSend={sendMessage}
+            onEditMessage={editMessage}
             onStop={stopRun}
             onNavigate={setPage}
             onUpdateSettings={updateSettings}

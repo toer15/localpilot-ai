@@ -130,6 +130,20 @@ export const BUILTIN_PLUGINS: BuiltinPluginDef[] = [
     groups: ['system'],
     permissions: ['system.read'],
     riskNote: 'Read-only system information.'
+  },
+  {
+    id: 'infinite-context',
+    name: 'Infinite Context',
+    version: '1.0.0',
+    author: 'LocalPilot AI',
+    description:
+      'Keeps local models working past their context window: old turns are compacted into a running summary, the plan survives in durable checkpoints, and the agent step ceiling is removed.',
+    category: 'AI',
+    icon: 'refresh',
+    groups: ['infinite'],
+    permissions: ['model.local', 'storage.local'],
+    riskNote:
+      'Compaction replaces old turns with a summary. Save important facts with infinite.checkpoint so nothing you need is lost.'
   }
 ]
 

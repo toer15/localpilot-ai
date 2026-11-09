@@ -23,6 +23,36 @@ npm run update:check
 
 `npm run acceptance` builds first. The individual scripts assume `out/` is current unless invoked via their npm script.
 
+## Results (9 November 2026 — 0.1.4)
+
+### Typecheck, build and self-test — PASS (14/14)
+
+`npm run typecheck` passed for `tsconfig.node.json` and `tsconfig.web.json`; `npm run build` produced main, preload and renderer bundles in `out/` after the updater, rewind and Infinite Context changes. `npx electron out/main/index.js --self-test --user-data-dir=%TEMP%\localpilot-selftest-014` exited 0 on an isolated profile reporting app version **0.1.4** and 14 checks, 0 failed. The two new checks:
+
+| Check | Detail |
+| --- | --- |
+| Infinite Context plugin | Enabled with 2 tools (`infinite.checkpoint`, `infinite.status`); a checkpoint was persisted and re-listed for a real conversation |
+| Message edit and conversation rewind | Edited the first user turn, removed 3 later messages, kept exactly 1 edited message; assistant turns rejected editing |
+
+The shared checks still passed: 59 tools across 13 groups, SQLite, hardware, Ollama discovery, a real `READY` inference round-trip, the Full PC path guard, PowerShell in 631 ms, a 2560×1440 screenshot, headless Edge, the MCP SDK and local-only prerequisites.
+
+### Message editing — PASS (isolated real app)
+
+`node artifacts/ui-edit-014.mjs` launched the built 0.1.4 app with `--user-data-dir` in `%TEMP%` (the installed 0.1.3 app holds the default single-instance lock), skipped onboarding, and used the real local model `qwen3.6:27b`.
+
+- Two prompts (`FIRST_ANSWER`, `SECOND_ANSWER`) left 4 stored messages and 2 user turns.
+- **Edit** on the first user turn filled the composer with the original prompt and showed the “Editing a sent message…” banner (`artifacts/ui-edit-mode-014.png`).
+- Sending `EDITED_ANSWER` from that state left exactly 2 stored messages — the edited user turn and one new assistant reply — with one user bubble in the UI and no `FIRST_ANSWER`/`SECOND_ANSWER` text anywhere (`artifacts/ui-edit-after-014.png`).
+- The self-test separately proved that an assistant turn cannot be edited (`replaceUserMessage` returns `false`).
+
+### Infinite Context — PARTIAL
+
+The self-test proved the plugin is enabled, both tools are registered, and a checkpoint persists and lists for a real conversation. No conversation was grown past the 32k window to force an actual compaction, so the rolling-summary path still needs a long-run test.
+
+### Automatic silent updates — IMPLEMENTED, NOT EXERCISED
+
+When `update-downloaded` fires, the updater waits six seconds, then calls `quitAndInstall(true, true)` through the same `shutdown()` path as a normal quit. If `agentRunner.active()` is non-empty the install is deferred ten seconds at a time, and `autoInstallOnAppQuit` is on. This path was not exercised: it needs a published newer release plus an older packaged build, and the running 0.1.3 installation was deliberately left alone.
+
 ## Results (9 November 2026 — 0.1.3)
 
 ### Typecheck and build — PASS

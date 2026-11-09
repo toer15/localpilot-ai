@@ -35,6 +35,7 @@ interface Props {
   activeModel: ModelInfo | null
   onSelectModel: (providerId: string, modelId: string) => void
   onSend: (text: string, attachments: Attachment[]) => Promise<void>
+  onEditMessage: (messageId: string, text: string) => Promise<void>
   onStop: () => Promise<void>
   onNavigate: (page: Page) => void
   onUpdateSettings: (patch: Record<string, unknown>) => Promise<AppSettings>
@@ -180,11 +181,21 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
   )
 }
 
-function UserMessage({ message }: { message: StoredMessage }) {
+function UserMessage({ message, onEdit }: { message: StoredMessage; onEdit?: () => void }) {
   return (
     <div className="message user">
       <div className="msg-content">
         <div className="msg-meta" style={{ justifyContent: 'flex-end' }}>
+          {onEdit ? (
+            <button
+              className="msg-edit"
+              type="button"
+              onClick={onEdit}
+              title="Edit this message and drop everything after it"
+            >
+              <Icon name="edit" size={11} /> Edit
+            </button>
+          ) : null}
           <span className="name">You</span>
           <span>{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -269,6 +280,7 @@ export function ChatView(props: Props) {
     activeModel,
     onSelectModel,
     onSend,
+    onEditMessage,
     onStop,
     onNavigate,
     onUpdateSettings,
@@ -281,6 +293,7 @@ export function ChatView(props: Props) {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [queued, setQueued] = useState<QueuedMessage[]>([])
   const [composerError, setComposerError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -320,6 +333,7 @@ export function ChatView(props: Props) {
   // into a different chat.
   useEffect(() => {
     setQueued([])
+    setEditing(null)
   }, [conversation?.id])
 
   // Dispatch one queued message after the current run finishes. The next run
@@ -338,9 +352,42 @@ export function ChatView(props: Props) {
       })
   }, [queued, running, selected, onSend])
 
+  const beginEdit = (message: StoredMessage) => {
+    setEditing(message.id)
+    setText(message.content)
+    setAttachments(message.attachments ?? [])
+    setQueued([])
+    setComposerError(null)
+    stick.current = true
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  const cancelEdit = () => {
+    setEditing(null)
+    setText('')
+    setAttachments([])
+  }
+
   const submit = async (override?: string) => {
     const value = (override ?? text).trim()
     if ((!value && !attachments.length) || !selected) return
+    if (editing) {
+      if (!value) return
+      const messageId = editing
+      setEditing(null)
+      setText('')
+      setAttachments([])
+      setComposerError(null)
+      stick.current = true
+      try {
+        await onEditMessage(messageId, value)
+      } catch (err) {
+        setEditing(messageId)
+        setText(value)
+        setComposerError(`Could not edit the message: ${err instanceof Error ? err.message : String(err)}`)
+      }
+      return
+    }
     if (queued.length >= 20) {
       setComposerError('The queue is full (20 messages). Remove one or wait for the current task to finish.')
       return
@@ -585,7 +632,13 @@ export function ChatView(props: Props) {
               <>
                 {messages.map((message) =>
                   message.role === 'user' ? (
-                    <UserMessage key={message.id} message={message} />
+                    <UserMessage
+                      key={message.id}
+                      message={message}
+                      onEdit={
+                        message.id.startsWith('optimistic-') ? undefined : () => beginEdit(message)
+                      }
+                    />
                   ) : message.role === 'assistant' ? (
                     <AssistantMessage
                       key={message.id}
@@ -643,6 +696,16 @@ export function ChatView(props: Props) {
 
         <div className="composer-wrap">
           <div className="composer">
+            {editing ? (
+              <div className="edit-banner">
+                <Icon name="edit" size={12} />
+                <span>Editing a sent message. Sending replaces it and deletes every message after it.</span>
+                <span className="grow" />
+                <button className="btn btn-sm btn-ghost" type="button" onClick={cancelEdit}>
+                  Cancel
+                </button>
+              </div>
+            ) : null}
             {queued.length ? (
               <div className="queue-strip">
                 <div className="queue-strip-head">
@@ -688,11 +751,13 @@ export function ChatView(props: Props) {
                 value={text}
                 rows={1}
                 placeholder={
-                  running
-                    ? 'Queue a follow-up — it sends when this task finishes…'
-                    : selected
-                      ? `Ask ${modelName} to do something on this PC…`
-                      : 'Select a local model to begin…'
+                  editing
+                    ? 'Edit your message and press Enter to resend…'
+                    : running
+                      ? 'Queue a follow-up — it sends when this task finishes…'
+                      : selected
+                        ? `Ask ${modelName} to do something on this PC…`
+                        : 'Select a local model to begin…'
                 }
                 onChange={(e) => setText(e.target.value)}
                 onPaste={(event) => void handlePaste(event)}
@@ -726,7 +791,7 @@ export function ChatView(props: Props) {
                   type="button"
                   onClick={() => void submit()}
                   disabled={(!text.trim() && !attachments.length) || !selected}
-                  title={running ? 'Queue message to send after this task' : 'Send'}
+                  title={editing ? 'Save the edit and resend' : running ? 'Queue message to send after this task' : 'Send'}
                 >
                   <Icon name={running ? 'clock' : 'arrow-right'} size={15} />
                 </button>

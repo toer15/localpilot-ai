@@ -2,9 +2,9 @@
 
 LocalPilot AI is a local-first AI workstation for Windows. It runs a real agent against models on your own machine, controls the Windows desktop with your approval, edits files anywhere you authorize, runs PowerShell and Git, automates a local browser, and hosts MCP and native plugins. No API key is required, and there is no automatic cloud fallback.
 
-Installed builds update themselves from [GitHub Releases](https://github.com/toer15/localpilot-ai/releases): they check at launch and every four hours, download in the background, show an in-app prompt, and restart only when you choose. **Settings → About → Check for updates** also checks manually.
+Installed builds update themselves from [GitHub Releases](https://github.com/toer15/localpilot-ai/releases): they check at launch and every four hours, download in the background, install silently, and restart on their own — after an active task finishes. No installer wizard is shown. **Settings → About → Check for updates** also checks manually.
 
-**Version 0.1.3** · [Latest release](https://github.com/toer15/localpilot-ai/releases/tag/v0.1.3) · Windows 10/11 x64 · Electron 45 · React 19 · TypeScript 7 · SQLite
+**Version 0.1.4** · [Latest release](https://github.com/toer15/localpilot-ai/releases/tag/v0.1.4) · Windows 10/11 x64 · Electron 45 · React 19 · TypeScript 7 · SQLite
 
 ![LocalPilot AI home](docs/images/ui-home.png)
 
@@ -17,6 +17,8 @@ Installed builds update themselves from [GitHub Releases](https://github.com/toe
 - **AI App & Game Tester plugin** (installable from the marketplace): a DPI-correct click-through overlay on every display, an independent green AI cursor that moves only when the AI acts, a full-screen takeover border and an on-screen “Press Esc to stop testing” prompt. It stays above topmost full-screen games without taking focus.
 - **Coding and file work anywhere** with Full PC access: every enabled tool group is available, and file read/write/search/patch/delete accepts absolute paths. Turn Full PC access off for project-scoped file tools and profile-restricted tool groups.
 - **Queued follow-ups** while the agent is busy: send another message, see it above the composer, remove it if needed, and it starts automatically when the current task finishes.
+- **Editable sent messages**: hover a message you sent and choose **Edit**. Sending the edit replaces that message, deletes everything after it, and the model answers again from that point.
+- **Infinite Context** (built-in plugin): long tasks stop hitting a wall. Old turns are compacted into a rolling summary, durable checkpoints keep the plan, and the agent step ceiling is removed until you stop it.
 - **Plugins**: built-in capability packs, an MCP marketplace with real published servers, and a native plugin SDK. Packs can be disabled and their tools are removed from the model immediately.
 - **Five agent profiles** (General, Coding, Deep reasoning, Computer control, Game development), including Roblox Studio workflows through the Roblox Studio MCP preset.
 - **Local persistence** in SQLite: conversations, projects, memory, settings, plugins, activity and encrypted secrets. Optional keys are protected with Windows DPAPI.
@@ -27,8 +29,8 @@ Two Windows x64 builds are produced in `release/`:
 
 | Build | File |
 | --- | --- |
-| Installer (per-user NSIS) | `LocalPilot AI-Setup-0.1.3-x64.exe` |
-| Portable | `LocalPilot-Portable-0.1.3.exe` |
+| Installer (per-user NSIS) | `LocalPilot AI-Setup-0.1.4-x64.exe` |
+| Portable | `LocalPilot-Portable-0.1.4.exe` |
 
 The builds are **not code-signed**, so Windows SmartScreen may warn. Verify the source and choose “More info → Run anyway” only if you trust the build. The installer does not require administrator rights; it installs for the current user and can create desktop and Start Menu shortcuts. Installed NSIS builds use GitHub Releases for in-app updates; the portable executable does not self-update — download a newer portable build manually.
 
@@ -105,7 +107,7 @@ No conversations, prompts, files or credentials are sent to a cloud service by d
 
 ## Status and limitations
 
-Implemented and exercised on Windows 11 x64 with Ollama, `qwen3.6:27b` and a managed llama.cpp b12224 engine: real local chat, project and absolute-path file tools, PowerShell, desktop screenshots, Notepad interaction, browser automation, MCP install/tool discovery/removal, plugin revocation, cancellation, local-only blocking, queued follow-up messages, the installable AI tester overlay with a real Esc stop, Rocket League full-screen layering, forced 125%/150% DPI checks, persistence across restart, and a packaged app launch. The 0.1.3 isolated app test ran the Coding profile (which excludes Computer Use groups) with Full PC access on: the agent wrote an absolute-path file outside any project, used `screen.screenshot`, and replied `FULLPC_TOOLS_OK`; a queued follow-up then sent automatically and produced `QUEUED_MESSAGE_SENT`. A fresh profile downloaded the managed engine and a Qwen2.5 0.5B Q4_K_M GGUF, started llama-server, selected the model in the UI, and completed a real `LOCAL_READY` chat; repeating the chat with Ollama disabled returned `NO_OLLAMA_READY` using only llama.cpp. Ctrl+V attached a real Windows clipboard screenshot, including image-only Send. The packaged 0.1.3 build's Settings → About update check reached the live GitHub release and reported current; a preserved 0.1.2 build detected 0.1.3 with the release notes and began downloading. The final installer restart was not run. The builds are unsigned. The NSIS installer was built but not installed on a clean machine, and actual multi-monitor hardware was not available. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the full matrix and [docs/TESTING.md](docs/TESTING.md) for exact commands and results.
+Implemented and exercised on Windows 11 x64 with Ollama, `qwen3.6:27b` and a managed llama.cpp b12224 engine: real local chat, project and absolute-path file tools, PowerShell, desktop screenshots, Notepad interaction, browser automation, MCP install/tool discovery/removal, plugin revocation, cancellation, local-only blocking, queued follow-up messages, the installable AI tester overlay with a real Esc stop, Rocket League full-screen layering, forced 125%/150% DPI checks, persistence across restart, and a packaged app launch. The 0.1.3 isolated app test ran the Coding profile (which excludes Computer Use groups) with Full PC access on: the agent wrote an absolute-path file outside any project, used `screen.screenshot`, and replied `FULLPC_TOOLS_OK`; a queued follow-up then sent automatically and produced `QUEUED_MESSAGE_SENT`. A fresh profile downloaded the managed engine and a Qwen2.5 0.5B Q4_K_M GGUF, started llama-server, selected the model in the UI, and completed a real `LOCAL_READY` chat; repeating the chat with Ollama disabled returned `NO_OLLAMA_READY` using only llama.cpp. Ctrl+V attached a real Windows clipboard screenshot, including image-only Send. The packaged 0.1.3 build's Settings → About update check reached the live GitHub release and reported current; a preserved 0.1.2 build detected 0.1.3 with the release notes and began downloading. The 0.1.4 self-test passed 14/14 on an isolated profile, including message rewind and the Infinite Context checkpoint store (59 tools across 13 groups). The final installer restart was not run, and the 0.1.4 silent install/restart path still needs a newer published release and an older packaged build to exercise. The builds are unsigned. The NSIS installer was built but not installed on a clean machine, and actual multi-monitor hardware was not available. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the full matrix and [docs/TESTING.md](docs/TESTING.md) for exact commands and results.
 
 Native plugins execute in a forked child process, not an OS-level sandbox. MCP presets launch third-party servers through `npx`/`uvx` and are not audited by LocalPilot. Local-only mode cannot restrict code inside an explicitly enabled MCP server or native plugin.
 

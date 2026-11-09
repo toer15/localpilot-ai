@@ -237,6 +237,8 @@ export interface RunRequest {
   temperature?: number
   topP?: number
   maxTokens?: number
+  /** Replace this user message and drop every turn after it instead of adding a new message. */
+  replaceMessageId?: string
 }
 
 export interface ToolCallRequest {

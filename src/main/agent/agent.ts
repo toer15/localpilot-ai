@@ -20,6 +20,8 @@ import { getProject } from '../projects'
 import { toolRegistry } from '../tools'
 import type { ToolContext } from '../tools/types'
 import { buildSystemPrompt } from './prompt'
+import { builtinEnabled } from '../plugins/builtins'
+import { checkpointPromptBlock } from '../plugins/infinite'
 import { broadcast } from '../broadcast'
 import { recordActivity } from '../activity'
 import { log } from '../core/logger'
@@ -151,7 +153,10 @@ export class AgentRunner {
       parameters: tool.parameters
     }))
 
-    const systemPrompt = buildSystemPrompt({
+    // Infinite Context is a plugin, so disabling it removes the compaction,
+    // checkpoint tools and the raised step ceiling together.
+    const infinite = builtinEnabled('infinite-context')
+    let systemPrompt = buildSystemPrompt({
       settings: s,
       project,
       modelInfo,
@@ -159,8 +164,20 @@ export class AgentRunner {
       modelId: request.modelId,
       tools,
       profile,
-      nativeTools
+      nativeTools,
+      infinite
     })
+    if (infinite) {
+      const checkpoints = checkpointPromptBlock(request.conversationId)
+      if (checkpoints) systemPrompt += `\n\n## Saved checkpoints (Infinite Context)\n${checkpoints}`
+      this.emit({
+        type: 'notice',
+        runId,
+        level: 'info',
+        message:
+          'Infinite Context is on: old turns are compacted into a summary instead of being dropped, checkpoints survive, and the step ceiling is removed. Stop the run at any time.'
+      })
+    }
 
     const desiredContext = Math.max(profile.contextLength || 0, s.models.contextLength || 0)
     const modelMaxContext = modelInfo?.contextLength && modelInfo.contextLength >= 4096 ? modelInfo.contextLength : null
@@ -177,11 +194,16 @@ export class AgentRunner {
       providerMessages,
       contextLength,
       nativeTools ? toolSchemas : [],
-      maxOutputTokens
+      maxOutputTokens,
+      infinite
     )
 
-    const maxIterations = Math.max(1, Math.min(profile.maxIterations || s.agent.maxIterations, s.agent.maxIterations))
-    const maxToolCalls = Math.max(1, s.agent.toolCallLimit)
+    const maxIterations = infinite
+      ? INFINITE_ITERATION_CEILING
+      : Math.max(1, Math.min(profile.maxIterations || s.agent.maxIterations, s.agent.maxIterations))
+    const maxToolCalls = infinite
+      ? INFINITE_TOOL_CALL_CEILING
+      : Math.max(1, s.agent.toolCallLimit)
     let toolCallsUsed = 0
     let usageIn = 0
     let usageOut = 0
@@ -200,7 +222,8 @@ export class AgentRunner {
           providerMessages,
           contextLength,
           nativeTools ? toolSchemas : [],
-          maxOutputTokens
+          maxOutputTokens,
+          infinite
         )
         const streamed = { text: '', reasoning: '' }
         const result = await providers.chat(request.providerId, {
@@ -605,35 +628,106 @@ function estimateTokens(message: ProviderMessage): number {
   return Math.ceil(((message.content?.length ?? 0) + calls) / 4) + (message.images?.length ?? 0) * 1200
 }
 
+/** Infinite Context removes the practical stop conditions; the user can still stop a run. */
+const INFINITE_ITERATION_CEILING = 100_000
+const INFINITE_TOOL_CALL_CEILING = 1_000_000
+
+const COMPACTION_HEADER =
+  'COMPACTED HISTORY (Infinite Context): older turns were replaced by this summary. Treat these facts as already established and continue the task without repeating them.'
+
+function compactionSummary(dropped: ProviderMessage[]): string {
+  const parts: string[] = []
+  for (const message of dropped) {
+    const text = (message.content ?? '').replace(/\s+/g, ' ').trim()
+    if (!text) continue
+    if (message.role === 'user') {
+      parts.push(
+        text.startsWith('TOOL RESULTS')
+          ? `- Earlier tool results: ${text.slice(0, 300)}`
+          : `- User asked: ${text.slice(0, 600)}`
+      )
+    } else if (message.role === 'assistant') {
+      parts.push(`- Assistant replied: ${text.slice(0, 320)}`)
+      if (message.toolCalls?.length) {
+        parts.push(`- Tools used: ${message.toolCalls.map((call) => call.name).join(', ')}`)
+      }
+    } else if (message.role === 'tool') {
+      parts.push(`- ${message.name ?? 'tool'} result: ${text.slice(0, 260)}`)
+    }
+  }
+  if (!parts.length) return ''
+  return `${COMPACTION_HEADER}\n\n${parts.join('\n').slice(0, 6000)}`
+}
+
+function mergeCompaction(previous: string, next: string): string {
+  const body = next.slice(COMPACTION_HEADER.length).trim()
+  const merged = `${previous}\n\nNewer compacted turns:\n${body}`
+  if (merged.length <= 8000) return merged
+  return `${COMPACTION_HEADER}\n\n[oldest compacted detail dropped]\n${merged.slice(-7800)}`
+}
+
 /**
  * Trim whole conversation turns from the oldest end until the request fits.
  * Tool schemas and output tokens count against the same window, so history gets
  * what remains. The latest user turn and the system prompt are always preserved.
+ *
+ * With Infinite Context enabled the removed turns are folded into one compact
+ * system summary (merged across calls), so a long task keeps its thread instead
+ * of losing everything before the current turn.
  */
 function fitMessagesToContext(
   messages: ProviderMessage[],
   contextLength: number,
   tools: ProviderTool[],
-  maxOutput: number
+  maxOutput: number,
+  compact = false
 ): ProviderMessage[] {
   const toolTokens = tools.length ? Math.ceil(JSON.stringify(tools).length / 4) : 0
+  // Compaction keeps a summary of what was removed, so reserve room for it.
+  const reserved = compact ? 1800 : 0
   const budget = Math.max(
     1536,
-    contextLength - Math.min(Math.max(maxOutput, 1024), 8192) - toolTokens - 512
+    contextLength - Math.min(Math.max(maxOutput, 1024), 8192) - toolTokens - 512 - reserved
   )
   const copy = [...messages]
   let total = copy.reduce((sum, message) => sum + estimateTokens(message), 0)
+  const dropped: ProviderMessage[] = []
   let guard = 0
-  while (total > budget && copy.length > 2 && guard++ < 200) {
+  while (total > budget && copy.length > 2 && guard++ < 400) {
     const firstUser = copy.findIndex((message, index) => index > 0 && message.role === 'user')
     if (firstUser === -1) break
     const nextUser = copy.findIndex((message, index) => index > firstUser && message.role === 'user')
     if (nextUser === -1) break
     const removed = copy.splice(firstUser, nextUser - firstUser)
+    dropped.push(...removed)
     total -= removed.reduce((sum, message) => sum + estimateTokens(message), 0)
   }
+
+  if (compact && dropped.length) {
+    const summary = compactionSummary(dropped)
+    if (summary) {
+      const existing = copy.findIndex(
+        (message) => message.role === 'system' && (message.content ?? '').startsWith(COMPACTION_HEADER)
+      )
+      if (existing >= 0) {
+        total -= estimateTokens(copy[existing])
+        copy[existing] = { role: 'system', content: mergeCompaction(copy[existing].content ?? '', summary) }
+        total += estimateTokens(copy[existing])
+      } else {
+        const compacted: ProviderMessage = { role: 'system', content: summary }
+        copy.splice(1, 0, compacted)
+        total += estimateTokens(compacted)
+      }
+    }
+  }
+
   if (copy.length !== messages.length) {
-    log.debug('agent', `Trimmed history from ${messages.length} to ${copy.length} messages for ${contextLength} token context`)
+    log.debug(
+      'agent',
+      `Trimmed history from ${messages.length} to ${copy.length} messages for ${contextLength} token context${
+        compact ? ' (compacted)' : ''
+      }`
+    )
   }
   return copy
 }

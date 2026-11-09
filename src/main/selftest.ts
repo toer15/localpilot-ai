@@ -3,7 +3,10 @@ import path from 'node:path'
 import { app } from 'electron'
 import type { SelfTestCheck, SelfTestReport } from '@shared/types'
 import { appVersion, getPaths } from './core/paths'
-import { databaseSize, get } from './db'
+import { databaseSize, get, run } from './db'
+import { addMessage, createConversation, getConversation, replaceUserMessage, truncateAfterMessage } from './conversations'
+import { builtinEnabled } from './plugins/builtins'
+import { countCheckpoints, listCheckpoints, saveCheckpoint } from './plugins/infinite'
 import { settings } from './settings'
 import { detectHardware } from './hardware'
 import { providers } from './providers/manager'
@@ -15,6 +18,13 @@ import { resolveProjectPath } from './tools/fsutil'
 import { log } from './core/logger'
 
 const PS_OK = 'LOCALPILOT_PS_OK'
+
+/** Self-test conversations are removed without leaving activity entries behind. */
+function dropTempConversation(id: string) {
+  run('DELETE FROM messages WHERE conversation_id = ?', [id])
+  run('DELETE FROM context_checkpoints WHERE conversation_id = ?', [id])
+  run('DELETE FROM conversations WHERE id = ?', [id])
+}
 
 interface Options {
   fullChat?: boolean
@@ -150,6 +160,57 @@ export async function runSelfTest(options: Options = {}): Promise<SelfTestReport
     const missing = required.filter((r) => !names.includes(r))
     if (missing.length) throw new Error(`Required built-in tools missing: ${missing.join(', ')}`)
     return { detail: `${tools.length} enabled tools across ${new Set(tools.map((t) => t.group)).size} groups.` }
+  })
+
+  await check(checks, 'Infinite Context plugin', async () => {
+    if (!builtinEnabled('infinite-context')) throw new Error('Infinite Context is not installed or enabled.')
+    const tools = toolRegistry.list().filter((tool) => tool.group === 'infinite')
+    const names = tools.map((tool) => tool.name)
+    const missing = ['infinite.checkpoint', 'infinite.status'].filter((name) => !names.includes(name))
+    if (missing.length) throw new Error(`Infinite Context tools missing: ${missing.join(', ')}`)
+    const conversation = createConversation({ title: 'Self-test: Infinite Context' })
+    try {
+      const saved = saveCheckpoint(conversation.id, `SELFTEST_PLAN_${Date.now()} continue until verified`)
+      const listed = listCheckpoints(conversation.id)
+      if (!listed.some((item) => item.id === saved.id)) throw new Error('Saved checkpoint was not listed back.')
+      if (countCheckpoints(conversation.id) !== 1) throw new Error('Expected exactly one checkpoint after saving one.')
+      return {
+        detail: `Enabled with ${tools.length} tools (${names.join(', ')}); a checkpoint was persisted and re-listed for a real conversation.`
+      }
+    } finally {
+      dropTempConversation(conversation.id)
+    }
+  })
+
+  await check(checks, 'Message edit and conversation rewind', async () => {
+    const conversation = createConversation({ title: 'Self-test: message rewind' })
+    try {
+      const first = addMessage(conversation.id, { role: 'user', content: 'first question' })
+      const assistant = addMessage(conversation.id, { role: 'assistant', content: 'first answer' })
+      addMessage(conversation.id, { role: 'user', content: 'second question' })
+      addMessage(conversation.id, { role: 'assistant', content: 'second answer' })
+      if (replaceUserMessage(conversation.id, assistant.id, 'not allowed') !== false) {
+        throw new Error('An assistant message was editable.')
+      }
+      if (!replaceUserMessage(conversation.id, first.id, 'edited first question')) {
+        throw new Error('replaceUserMessage rejected a real user message.')
+      }
+      const removed = truncateAfterMessage(conversation.id, first.id)
+      const detail = getConversation(conversation.id)
+      if (!detail) throw new Error('Conversation disappeared after rewinding.')
+      if (detail.messages.length !== 1) {
+        throw new Error(`Expected 1 message after rewind, found ${detail.messages.length}.`)
+      }
+      const only = detail.messages[0]
+      if (only.id !== first.id || only.content !== 'edited first question') {
+        throw new Error('The edited message was not preserved as the newest turn.')
+      }
+      return {
+        detail: `Edited the first user turn, removed ${removed} later messages, kept exactly 1 edited message; assistant turns rejected editing.`
+      }
+    } finally {
+      dropTempConversation(conversation.id)
+    }
   })
 
   await check(checks, 'File path access guard', async () => {

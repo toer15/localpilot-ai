@@ -29,7 +29,7 @@ The acceptance scripts need Ollama running with at least one chat model, plus Ed
 ## Architecture map
 
 - `src/main/index.ts` — app lifecycle, window, single-instance lock, shutdown, `--self-test`.
-- `src/main/updater.ts` — `electron-updater` service: startup/four-hour checks, auto-download, status broadcasts, and explicit install coordinated with `shutdown()`.
+- `src/main/updater.ts` — `electron-updater` service: startup/four-hour checks, auto-download, silent install with automatic restart (deferred while an agent run is active), status broadcasts, and shutdown coordination for `quitAndInstall`.
 - `src/main/ipc.ts` — every privileged IPC handler. Renderer access must go through here.
 - `src/preload/index.ts` — `contextBridge` API; mirrored by `src/shared/api.ts`. Keep all three in sync.
 - `src/preload/overlay.ts` + `src/main/computer/overlay.ts` — isolated bridge and one overlay window per display for the optional AI tester overlay, including DPI bounds, z-order and Esc handling.
