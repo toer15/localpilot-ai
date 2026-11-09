@@ -1138,6 +1138,24 @@ kbd {
   color: var(--accent);
   border-color: var(--accent-line);
 }
+.copy-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 132px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 11.5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  z-index: 40;
+  pointer-events: none;
+}
 .edit-banner {
   display: flex;
   align-items: center;

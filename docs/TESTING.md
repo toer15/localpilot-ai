@@ -23,6 +23,28 @@ npm run update:check
 
 `npm run acceptance` builds first. The individual scripts assume `out/` is current unless invoked via their npm script.
 
+## Results (9 November 2026 — 0.1.5)
+
+### Typecheck, build, self-test and copy UI — PASS (15/15)
+
+`npm run typecheck` and `npm run build` passed after the copy and context-overflow changes. `npx electron out/main/index.js --self-test --user-data-dir=%TEMP%\localpilot-selftest-015c` exited 0 with app version 0.1.5 and 15 checks, 0 failed, including:
+
+| Check | Detail |
+| --- | --- |
+| Tool registry | 60 tools across 13 groups |
+| Infinite Context plugin | `infinite.checkpoint`, `infinite.recall`, `infinite.status`; a checkpoint persisted and a stored earlier turn was found by `infinite.recall` |
+| Context overflow guard | A 270,029-character turn was reduced to 15,073 characters for an 8,192-token window, keeping the head and tail |
+| Message edit and conversation rewind | Edited the first user turn, removed 3 later messages, kept exactly 1 edited message |
+
+`node artifacts/ui-copy-015.mjs` launched the built app on an isolated profile (the installed copy holds the default single-instance lock), sent one prompt and verified both copy paths against the real Windows clipboard:
+
+- Right-clicking the assistant bubble with nothing selected copied its 11-character reply and showed the “Message copied” confirmation.
+- The Copy action on the user message copied its 31-character prompt.
+
+### Context overflow — PARTIAL
+
+The fitter and conservative token estimate are covered by the self-test. A real provider rejection was not forced, so the catch → compact → halve `num_ctx` → retry branch is implemented but not exercised end to end.
+
 ## Results (9 November 2026 — 0.1.4)
 
 ### Typecheck, build and self-test — PASS (14/14)

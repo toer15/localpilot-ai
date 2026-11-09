@@ -7,6 +7,7 @@ import { databaseSize, get, run } from './db'
 import { addMessage, createConversation, getConversation, replaceUserMessage, truncateAfterMessage } from './conversations'
 import { builtinEnabled } from './plugins/builtins'
 import { countCheckpoints, listCheckpoints, saveCheckpoint } from './plugins/infinite'
+import { fitMessagesToContext } from './agent/agent'
 import { settings } from './settings'
 import { detectHardware } from './hardware'
 import { providers } from './providers/manager'
@@ -174,11 +175,52 @@ export async function runSelfTest(options: Options = {}): Promise<SelfTestReport
       const listed = listCheckpoints(conversation.id)
       if (!listed.some((item) => item.id === saved.id)) throw new Error('Saved checkpoint was not listed back.')
       if (countCheckpoints(conversation.id) !== 1) throw new Error('Expected exactly one checkpoint after saving one.')
+      const sentinel = `ARCHIVE_SENTINEL_${saved.id.slice(0, 8)}`
+      addMessage(conversation.id, { role: 'user', content: `${sentinel} remember this hidden detail` })
+      const recallTool = toolRegistry.all().find((tool) => tool.name === 'infinite.recall')
+      if (!recallTool) throw new Error('infinite.recall is not registered.')
+      const recall = await recallTool.handler(
+        { query: sentinel },
+        {
+          runId: 'selftest',
+          conversationId: conversation.id,
+          providerId: 'selftest',
+          modelId: 'selftest',
+          projectId: null,
+          projectPath: null,
+          signal: new AbortController().signal,
+          log: () => undefined
+        }
+      )
+      if (!recall.ok || !recall.content.includes(sentinel)) {
+        throw new Error(`infinite.recall did not return the archived turn: ${recall.content.slice(0, 200)}`)
+      }
       return {
-        detail: `Enabled with ${tools.length} tools (${names.join(', ')}); a checkpoint was persisted and re-listed for a real conversation.`
+        detail: `Enabled with ${tools.length} tools (${names.join(', ')}); a checkpoint was persisted, re-listed and a stored earlier turn was found by infinite.recall.`
       }
     } finally {
       dropTempConversation(conversation.id)
+    }
+  })
+
+  await check(checks, 'Context overflow guard', async () => {
+    const huge = `Reply with exactly: LONG_OK\n\n${'The quick brown fox jumps over the lazy dog. '.repeat(6000)}`
+    const fitted = fitMessagesToContext(
+      [
+        { role: 'system', content: 'You are a context-fit test system prompt.' },
+        { role: 'user', content: huge }
+      ],
+      8192,
+      [],
+      2048
+    )
+    const content = fitted.find((message) => message.role === 'user')?.content ?? ''
+    if (!content.includes('middle truncated')) {
+      throw new Error('An oversized user turn was not truncated to fit the context window.')
+    }
+    if (content.length >= huge.length) throw new Error('The oversized turn did not shrink.')
+    return {
+      detail: `A ${huge.length.toLocaleString()}-character turn was reduced to ${content.length.toLocaleString()} characters for an 8,192-token window, keeping the head and tail.`
     }
   })
 

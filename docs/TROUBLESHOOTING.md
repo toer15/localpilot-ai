@@ -15,7 +15,7 @@ Pull a chat model first (`ollama pull qwen3:8b`) and refresh discovery. If a con
 
 ## “Request exceeds the available context size”
 
-The agent budgets context, but a very long conversation or a small-context model can still overflow. Raise **Context length** in Settings (32k default), start a new conversation, or switch to a model with a larger context. Legacy 8k settings are migrated to 32k automatically. Screenshots and tool output are capped by the agent.
+Since 0.1.5 the agent handles this itself where it can: it estimates tokens conservatively, truncates an oversized turn head-and-tail before sending, and if the provider still rejects the prompt it compacts, halves `num_ctx` (never below 8,192) and retries once with a visible notice. If it still fails, raise **Context length** in Settings (32k default), start a new conversation, or switch to a model with a larger context. Legacy 8k settings are migrated to 32k automatically. Screenshots and tool output are capped by the agent.
 
 ## Inference is slow or runs out of VRAM
 

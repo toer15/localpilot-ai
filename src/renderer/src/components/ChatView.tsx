@@ -183,7 +183,7 @@ function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRe
 
 function UserMessage({ message, onEdit }: { message: StoredMessage; onEdit?: () => void }) {
   return (
-    <div className="message user">
+    <div className="message user" data-message-id={message.id}>
       <div className="msg-content">
         <div className="msg-meta" style={{ justifyContent: 'flex-end' }}>
           {onEdit ? (
@@ -209,6 +209,11 @@ function UserMessage({ message, onEdit }: { message: StoredMessage; onEdit?: () 
             </div>
           ) : null}
         </div>
+        {message.content ? (
+          <div className="msg-actions" style={{ justifyContent: 'flex-end' }}>
+            <CopyButton text={message.content} label="Copy message" />
+          </div>
+        ) : null}
       </div>
       <div className="msg-avatar user">YOU</div>
     </div>
@@ -229,7 +234,7 @@ function AssistantMessage({
   streaming?: boolean
 }) {
   return (
-    <div className="message assistant">
+    <div className="message assistant" data-message-id={message.id}>
       <div className="msg-avatar assistant">
         <Icon name="zap" size={13} />
       </div>
@@ -294,6 +299,7 @@ export function ChatView(props: Props) {
   const [queued, setQueued] = useState<QueuedMessage[]>([])
   const [composerError, setComposerError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -366,6 +372,17 @@ export function ChatView(props: Props) {
     setEditing(null)
     setText('')
     setAttachments([])
+  }
+
+  const copyMessage = async (message: StoredMessage) => {
+    if (!message.content) return
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopiedId(message.id)
+      window.setTimeout(() => setCopiedId((current) => (current === message.id ? null : current)), 1800)
+    } catch (err) {
+      setComposerError(`Could not copy the message: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   const submit = async (override?: string) => {
@@ -563,6 +580,16 @@ export function ChatView(props: Props) {
         <div
           className="chat-scroll"
           ref={scrollRef}
+          onContextMenu={(event) => {
+            const selection = window.getSelection()?.toString().trim()
+            if (selection) return
+            const target = (event.target as HTMLElement).closest('.message')
+            const id = target?.getAttribute('data-message-id')
+            const message = id ? messages.find((item) => item.id === id) : undefined
+            if (!message?.content) return
+            event.preventDefault()
+            void copyMessage(message)
+          }}
           onScroll={(e) => {
             const el = e.currentTarget
             stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 140
@@ -857,6 +884,12 @@ export function ChatView(props: Props) {
             style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: 10, border: '1px solid var(--border)' }}
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      ) : null}
+
+      {copiedId ? (
+        <div className="copy-toast" role="status">
+          <Icon name="check" size={12} /> Message copied
         </div>
       ) : null}
     </div>

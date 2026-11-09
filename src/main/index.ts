@@ -118,6 +118,25 @@ function createWindow() {
 
   Menu.setApplicationMenu(null)
 
+  // Right-click only gets the native edit menu for text fields or an actual
+  // selection. On a message bubble the renderer copies the whole message when
+  // nothing is selected, so the two paths never fight over the gesture.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const hasSelection = params.selectionText.trim().length > 0
+    if (!params.isEditable && !hasSelection) return
+    const menu = Menu.buildFromTemplate([
+      { role: 'undo', enabled: params.editFlags.canUndo },
+      { role: 'redo', enabled: params.editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: params.editFlags.canCut },
+      { role: 'copy', enabled: params.editFlags.canCopy || hasSelection },
+      { role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll' }
+    ])
+    menu.popup({ window: mainWindow ?? undefined })
+  })
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
     if (process.env.LOCALPILOT_DEVTOOLS === '1') mainWindow?.webContents.openDevTools({ mode: 'detach' })

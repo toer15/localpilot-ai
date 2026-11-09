@@ -226,27 +226,58 @@ export class AgentRunner {
           infinite
         )
         const streamed = { text: '', reasoning: '' }
-        const result = await providers.chat(request.providerId, {
-          model: request.modelId,
-          modelInfo: modelInfo ?? undefined,
-          messages: providerMessages,
-          tools: nativeTools && toolSchemas.length ? toolSchemas : undefined,
-          temperature: request.temperature ?? profile.temperature ?? s.models.temperature,
-          topP: request.topP ?? profile.topP ?? s.models.topP,
-          maxTokens: maxOutputTokens,
-          contextLength,
-          reasoningEffort,
-          stream: true,
-          signal: state.abort.signal,
-          onDelta: (text) => {
-            streamed.text += text
-            this.emit({ type: 'assistant_delta', runId, text })
-          },
-          onReasoning: (text) => {
-            streamed.reasoning += text
-            this.emit({ type: 'reasoning_delta', runId, text })
-          }
-        })
+        const requestChat = (history: ProviderMessage[], context: number) =>
+          providers.chat(request.providerId, {
+            model: request.modelId,
+            modelInfo: modelInfo ?? undefined,
+            messages: history,
+            tools: nativeTools && toolSchemas.length ? toolSchemas : undefined,
+            temperature: request.temperature ?? profile.temperature ?? s.models.temperature,
+            topP: request.topP ?? profile.topP ?? s.models.topP,
+            maxTokens: maxOutputTokens,
+            contextLength: context,
+            reasoningEffort,
+            stream: true,
+            signal: state.abort.signal,
+            onDelta: (text) => {
+              streamed.text += text
+              this.emit({ type: 'assistant_delta', runId, text })
+            },
+            onReasoning: (text) => {
+              streamed.reasoning += text
+              this.emit({ type: 'reasoning_delta', runId, text })
+            }
+          })
+
+        let liveContext = contextLength
+        let result: Awaited<ReturnType<typeof requestChat>>
+        try {
+          result = await requestChat(providerMessages, liveContext)
+        } catch (err) {
+          if (!isContextOverflow(err)) throw err
+          // Ollama rejects the whole request when the real token count crosses
+          // num_ctx. Compact hard and retry once instead of failing the task.
+          this.emit({
+            type: 'notice',
+            runId,
+            level: 'warn',
+            message: 'The conversation did not fit the model context window. Compacting it further and retrying…'
+          })
+          // The model may also advertise more window than it can actually run;
+          // halving num_ctx is a real fallback, not just a smaller prompt.
+          liveContext = Math.max(8192, Math.floor(liveContext / 2))
+          providerMessages = fitMessagesToContext(
+            providerMessages,
+            liveContext,
+            nativeTools ? toolSchemas : [],
+            maxOutputTokens,
+            infinite,
+            true
+          )
+          streamed.text = ''
+          streamed.reasoning = ''
+          result = await requestChat(providerMessages, liveContext)
+        }
 
         usageIn += result.usage?.inputTokens ?? 0
         usageOut += result.usage?.outputTokens ?? 0
@@ -625,7 +656,9 @@ async function loadImages(attachments?: Attachment[]): Promise<string[]> {
 
 function estimateTokens(message: ProviderMessage): number {
   const calls = message.toolCalls ? JSON.stringify(message.toolCalls).length : 0
-  return Math.ceil(((message.content?.length ?? 0) + calls) / 4) + (message.images?.length ?? 0) * 1200
+  // Deliberately conservative: code and JSON tokenise denser than plain prose,
+  // and Ollama rejects the whole request when the real count crosses num_ctx.
+  return Math.ceil(((message.content?.length ?? 0) + calls) / 3.6) + (message.images?.length ?? 0) * 1200
 }
 
 /** Infinite Context removes the practical stop conditions; the user can still stop a run. */
@@ -675,19 +708,23 @@ function mergeCompaction(previous: string, next: string): string {
  * system summary (merged across calls), so a long task keeps its thread instead
  * of losing everything before the current turn.
  */
-function fitMessagesToContext(
+export function fitMessagesToContext(
   messages: ProviderMessage[],
   contextLength: number,
   tools: ProviderTool[],
   maxOutput: number,
-  compact = false
+  compact = false,
+  aggressive = false
 ): ProviderMessage[] {
-  const toolTokens = tools.length ? Math.ceil(JSON.stringify(tools).length / 4) : 0
+  const toolTokens = tools.length ? Math.ceil(JSON.stringify(tools).length / 3.6) : 0
   // Compaction keeps a summary of what was removed, so reserve room for it.
   const reserved = compact ? 1800 : 0
+  const safeContext = Math.max(2048, contextLength)
+  const outputReserve = Math.min(Math.max(maxOutput, 512), Math.floor(safeContext * 0.25))
+  const windowBudget = safeContext - outputReserve - Math.ceil(toolTokens * 1.15) - 1024
   const budget = Math.max(
-    1536,
-    contextLength - Math.min(Math.max(maxOutput, 1024), 8192) - toolTokens - 512 - reserved
+    512,
+    Math.min(aggressive ? safeContext * 0.4 : windowBudget, windowBudget) - reserved
   )
   const copy = [...messages]
   let total = copy.reduce((sum, message) => sum + estimateTokens(message), 0)
@@ -721,6 +758,11 @@ function fitMessagesToContext(
     }
   }
 
+  // Last resort: a single oversized turn (a pasted log, a huge tool result)
+  // can still overflow after whole-turn trimming. Shrink the largest messages
+  // instead of letting the provider reject the request outright.
+  if (total > budget) total = truncateMessagesToFit(copy, budget, total)
+
   if (copy.length !== messages.length) {
     log.debug(
       'agent',
@@ -730,6 +772,42 @@ function fitMessagesToContext(
     )
   }
   return copy
+}
+
+function truncateMessagesToFit(messages: ProviderMessage[], budget: number, startTotal: number): number {
+  let total = startTotal
+  let guard = 0
+  while (total > budget && guard++ < 200) {
+    let target = -1
+    let longest = 600
+    for (let index = 1; index < messages.length; index++) {
+      const length = messages[index].content?.length ?? 0
+      if (length > longest) {
+        longest = length
+        target = index
+      }
+    }
+    if (target === -1) break
+    total -= estimateTokens(messages[target])
+    // Keep both ends: questions and instructions often sit at the start or the
+    // end of a long paste, and the middle is what can be reconstructed.
+    const keep = Math.max(300, Math.floor(longest * 0.4))
+    const content = messages[target].content ?? ''
+    messages[target] = {
+      ...messages[target],
+      content: `${content.slice(0, keep)}\n\n[…middle truncated to fit the model context…]\n\n${content.slice(-keep)}`
+    }
+    total += estimateTokens(messages[target])
+  }
+  return total
+}
+
+/** Providers word this differently; the recovery is the same either way. */
+function isContextOverflow(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /exceed|context (size|length|window)|too (long|large)|maximum context|input length|num_ctx/i.test(
+    message
+  )
 }
 
 export const agentRunner = new AgentRunner()
